@@ -303,7 +303,7 @@
     S.sheet = sheet;
     const short = ['month', 'amount', 'confirm', 'backup'].includes(sheet.type);
     el.sheetLayer.innerHTML = `<button class="scrim" data-action="close-sheet" aria-label="Закрыть" tabindex="-1"></button>
-      <div class="sheet${short ? ' short' : ''}" role="dialog" aria-modal="true"><div class="grabber" style="margin-top:8px"></div><div class="sheet-body"></div></div>`;
+      <div class="sheet${short ? ' short' : ''}" role="dialog" aria-modal="true"><div class="sheet-body"></div></div>`;
     renderSheet();
     el.sheetLayer.getBoundingClientRect(); // старт анимации
     el.sheetLayer.classList.add('on');
