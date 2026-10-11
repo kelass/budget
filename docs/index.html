@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Бюджет</title>
+<meta name="description" content="Учёт расходов и бюджет на месяц. Работает офлайн, данные хранятся на телефоне.">
+<meta name="theme-color" content="#F3F4F1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Бюджет">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="preload" href="fonts/onest-cyrillic-800-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="app.css">
+<style>:root{padding-top:env(safe-area-inset-top,0px)}body{margin:0}</style>
+</head>
+<body>
+<div class="stage"><div class="device" id="device"><div class="boot">Загрузка…</div></div></div>
+<noscript><p style="padding:24px">Для работы приложения нужен JavaScript.</p></noscript>
+<script>window.__SQL_BASE__='./vendor/';</script>
+<script src="vendor/sql-wasm.js"></script>
+<script src="js/domain.js"></script>
+<script src="js/infra.js"></script>
+<script src="js/services.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/pwa.js"></script>
+</body>
+</html>

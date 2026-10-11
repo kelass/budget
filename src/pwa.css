@@ -1,0 +1,9 @@
+/* Экран установки и плашка обновления — только для устанавливаемой версии */
+.install-steps { list-style: none; margin: 4px 0 0; padding: 16px; background: var(--card); border-radius: 18px; display: flex; flex-direction: column; gap: 14px; counter-reset: s; }
+.install-steps li { display: flex; align-items: center; gap: 12px; font-size: 15px; line-height: 1.35; }
+.install-steps .pi { width: 40px; height: 40px; border-radius: 12px; background: var(--bg); color: var(--link); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.install-arrow { display: flex; justify-content: center; color: var(--link); padding: 4px 0 calc(10px + var(--sab)); animation: nudge 1.4s ease-in-out infinite; }
+@keyframes nudge { 50% { transform: translateY(8px); } }
+.update-bar { position: absolute; left: 12px; right: 12px; top: calc(var(--top-pad) - 8px); z-index: 60; background: var(--dark); color: #FFFFFF; border-radius: 16px; padding: 10px 10px 10px 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; font-weight: 600; box-shadow: 0 10px 30px rgba(21, 23, 28, 0.25); }
+.update-bar button { height: 36px; padding: 0 14px; border-radius: 11px; border: 0; background: var(--accent); color: #FFFFFF; font-size: 14px; font-weight: 700; }
+.update-bar button:disabled { opacity: 0.6; }
