@@ -313,7 +313,7 @@
     const factors = [0.86, 1.04, 1.18, 1.1, 1.0, 1.04];
     const nowStamp = Dates.stamp(now);
 
-    repos.settings.set('currency', 'RUB');
+    repos.settings.set('currency', 'UAH');
     repos.settings.set('start_day', startDay);
     repos.settings.set('remind_days', 2);
     repos.settings.set('onboarded', 1);

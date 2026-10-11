@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   const { Dates, Period, Money, BudgetMath, Labels, plural } = window.Domain;
-  const { BudgetService, CURRENCIES, PALETTE, PRESETS } = window.App;
+  const { BudgetService, CURRENCIES, PALETTE, PRESETS, DEFAULT_CURRENCY } = window.App;
 
   // ------------------------------------------------------------- Утилиты ---
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -600,7 +600,7 @@
 
   // ============================================================ Онбординг ===
   function renderOnboarding() {
-    const o = S.onb || (S.onb = { step: 0, currency: 'RUB', amount: '', presets: PRESETS.map((p) => ({ ...p })) });
+    const o = S.onb || (S.onb = { step: 0, currency: DEFAULT_CURRENCY, amount: '', presets: PRESETS.map((p) => ({ ...p })) });
     const sym = (CURRENCIES.find((c) => c.code === o.currency) || CURRENCIES[0]).sym;
     st = { ...st, sym };
     const steps = (k) => `<div class="steps" aria-label="Шаг ${k} из 3">${[1, 2, 3].map((i) => `<i class="${i <= k ? 'on' : ''}"></i>`).join('')}</div>`;

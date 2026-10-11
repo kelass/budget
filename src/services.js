@@ -19,6 +19,9 @@
     { code: 'GEL', sym: '₾', name: 'Грузинский лари' }
   ];
 
+  /** Валюта по умолчанию для новых пользователей */
+  const DEFAULT_CURRENCY = 'UAH';
+
   const PALETTE = [
     ['#0F766E', 'Бирюзовый'], ['#23805E', 'Зелёный'], ['#2F74BD', 'Синий'], ['#6A4FCC', 'Фиолетовый'],
     ['#C2416A', 'Розовый'], ['#B84A17', 'Оранжевый'], ['#8E7414', 'Горчичный'], ['#2B3A55', 'Тёмно-синий']
@@ -48,7 +51,7 @@
     // ------------------------------------------------------------ Настройки
     settings() {
       const s = this.settingsRepo.all();
-      const currency = CURRENCIES.find((c) => c.code === s.currency) || CURRENCIES[0];
+      const currency = CURRENCIES.find((c) => c.code === (s.currency || DEFAULT_CURRENCY)) || CURRENCIES[0];
       return {
         currency,
         sym: currency.sym,
@@ -269,5 +272,5 @@
     async wipe() { await this.db.reset(); }
   }
 
-  root.App = { BudgetService, CURRENCIES, PALETTE, PRESETS };
+  root.App = { BudgetService, CURRENCIES, PALETTE, PRESETS, DEFAULT_CURRENCY };
 })(window);
