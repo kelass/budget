@@ -98,6 +98,7 @@ python3 build_pwa.py   # installable app → docs/
 python3 build.py       # single-page simulation → dist/budget.html
 python3 test/regress.py <old docs folder>   # migration, gestures, savings, currency checks
 python3 test/income.py                      # income, reminders, income analytics, category pages
+python3 test/demo.py                        # demo data never goes negative for any month start day
 ```
 
 To publish changes, commit the updated `docs/` folder to the `main` branch. GitHub Pages serves it automatically, and users get a "new version available" banner in the app.

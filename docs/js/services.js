@@ -453,8 +453,9 @@
     }
 
     async loadDemo(now) {
+      const startDay = this.settings().startDay; // демо строим под «Начало месяца» пользователя
       await this.db.reset();
-      this.db.write(() => I.seedDemo({ settings: this.settingsRepo, categories: this.categories, budgets: this.budgets, expenses: this.expenses, incomes: this.incomes }, now));
+      this.db.write(() => I.seedDemo({ settings: this.settingsRepo, categories: this.categories, budgets: this.budgets, expenses: this.expenses, incomes: this.incomes }, now, startDay));
       await this.db.flush();
     }
     async wipe() { await this.db.reset(); }
