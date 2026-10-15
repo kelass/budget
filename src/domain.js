@@ -126,6 +126,49 @@
     }
   };
 
+  /**
+   * Подписи периода для людей. Если месяц начинается с 1-го — это просто «Октябрь».
+   * Если с другого числа (день зарплаты) — показываем честный диапазон «6 окт – 5 ноя»,
+   * чтобы не путать с календарным месяцем.
+   */
+  const PeriodLabel = {
+    isCalendar(startDay) { return startDay === 1; },
+    range(key, startDay, now) {
+      const r = Period.range(key, startDay);
+      const last = new Date(r.end); last.setDate(last.getDate() - 1);
+      const yr = (d) => (d.getFullYear() !== now.getFullYear() ? ' ' + d.getFullYear() : '');
+      const sameYear = r.start.getFullYear() === last.getFullYear();
+      return r.start.getDate() + ' ' + MONTHS.abbr[r.start.getMonth()] + (sameYear ? '' : yr(r.start)) + ' – ' + last.getDate() + ' ' + MONTHS.abbr[last.getMonth()] + yr(last);
+    },
+    /** Заголовок: «Октябрь» / «6 окт – 5 ноя» */
+    title(key, startDay, now) { return PeriodLabel.isCalendar(startDay) ? Period.title(key, now) : PeriodLabel.range(key, startDay, now); },
+    /** «в октябре» / «за 6 окт – 5 ноя» */
+    inPhrase(key, startDay, now) { return PeriodLabel.isCalendar(startDay) ? 'в ' + Period.prep(key) : 'за ' + PeriodLabel.range(key, startDay, now); },
+    /** «на октябрь» / «на 6 окт – 5 ноя» */
+    forPhrase(key, startDay, now) { return PeriodLabel.isCalendar(startDay) ? 'на ' + Period.name(key).toLowerCase() : 'на ' + PeriodLabel.range(key, startDay, now); },
+    /** Короткая подпись для столбика графика: «Окт» / «6.10» */
+    short(key, startDay) {
+      if (PeriodLabel.isCalendar(startDay)) return Period.short(key);
+      const r = Period.range(key, startDay);
+      return r.start.getDate() + '.' + pad2(r.start.getMonth() + 1);
+    }
+  };
+
+  // --------------------------------------------------------------- Валюта ---
+  const Fx = {
+    /**
+     * Перевод суммы между валютами через кросс-курс к евро.
+     * Результат округляется до целых единиц валюты — лимиты с копейками выглядят как шум.
+     */
+    convert(minor, fromPerEur, toPerEur) {
+      if (!minor) return 0;
+      const units = minor / 100 / fromPerEur * toPerEur;
+      return Math.max(units > 0 ? 1 : 0, Math.round(units)) * 100;
+    },
+    /** Сколько единиц валюты to за 1 единицу from */
+    rate(fromPerEur, toPerEur) { return toPerEur / fromPerEur; }
+  };
+
   // ------------------------------------------------------- Расчёты бюджета ---
   const BudgetMath = {
     /**
@@ -214,7 +257,7 @@
     days(n) { return n + ' ' + plural(n, ['день', 'дня', 'дней']); }
   };
 
-  const api = { Dates, MONTHS, plural, Money, Period, BudgetMath, Labels, NBSP };
+  const api = { Dates, MONTHS, plural, Money, Period, PeriodLabel, Fx, BudgetMath, Labels, NBSP };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Domain = api;
 })(typeof window !== 'undefined' ? window : globalThis);

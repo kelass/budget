@@ -58,6 +58,11 @@
   const now = () => new Date();
   const fmt = (minor, o) => Money.format(minor, st.sym, o);
   const num = (minor) => Money.format(minor, '', { noFraction: Math.abs(minor) >= 100000 });
+  // Подписи периода с учётом дня начала месяца: «Октябрь» или «6 окт – 5 ноя»
+  const PT = (p) => svc.periodTitle(p, now());
+  const PIN = (p) => svc.periodIn(p, now());
+  const PFOR = (p) => svc.periodFor(p, now());
+  const cap1 = (t) => t.charAt(0).toUpperCase() + t.slice(1);
   const fmtR = (minor) => Money.format(minor, st.sym, { noFraction: Math.abs(minor) >= 100000 }); // крупные суммы без копеек
 
   // ============================================================== Экраны ===
@@ -68,7 +73,7 @@
     const out = [];
 
     out.push(`<div class="head">
-      <button class="month-btn" data-action="pick-month" aria-label="Выбрать месяц, сейчас ${esc(Period.title(S.period, n))}">${esc(Period.title(S.period, n))}${svg(P.chev, 18, 2.5)}</button>
+      <button class="month-btn" data-action="pick-month" aria-label="Выбрать месяц, сейчас ${esc(PT(S.period))}">${esc(PT(S.period))}${svg(P.chev, 18, 2.5)}</button>
       <button class="icon-btn" data-action="open-settings" aria-label="Настройки">${svg(P.gear, 20)}</button>
     </div>`);
 
@@ -101,6 +106,17 @@
       <div class="hero-legend"><span>${pct}% бюджета</span><span>${ov.state === 'current' ? 'сегодня — ' + Labels.shortDate(n) : Labels.days(ov.totalDays)}</span></div>
       <div class="hero-tiles">${tiles.map(([k, v]) => `<div class="hero-tile"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div>
     </section>`);
+
+    const sv = svc.savings();
+    if (sv.cat) {
+      const parts = [];
+      if (sv.initial) parts.push('стартовые ' + fmtR(sv.initial));
+      parts.push('взносы ' + fmtR(sv.contributed));
+      out.push(`<button class="savings" data-action="hist-cat" data-id="${sv.cat.id}" aria-label="Всего отложено ${fmtR(sv.total)}. Открыть взносы">
+        ${ava(sv.cat, 44)}
+        <span class="main"><span class="k">Всего отложено</span><span class="v">${fmtR(sv.total)}</span><span class="s">${parts.join(' + ')}</span></span>
+        ${svg(P.right, 20, 2.2, 'var(--muted)')}</button>`);
+    }
 
     if (vm.mandatory.length) {
       const done = vm.mandatory.filter((m) => m.st.done).length;
@@ -149,7 +165,7 @@
     const total = svc.history(S.period, {}).total;
     const cats = svc.categoryList();
     return `<div class="head"><h1 class="h1">История</h1>
-        <button class="link-btn" style="color:var(--ink-2);font-size:14px;font-weight:500" data-action="pick-month">${esc(Period.title(S.period, n))} · ${fmtR(total)}</button></div>
+        <button class="link-btn" style="color:var(--ink-2);font-size:14px;font-weight:500" data-action="pick-month">${esc(PT(S.period))} · ${fmtR(total)}</button></div>
       <label class="search" for="hist-q">${svg(P.search, 18, 2, 'var(--muted)')}<span class="sr">Поиск</span>
         <input id="hist-q" type="search" placeholder="Поиск по заметкам" value="${esc(S.hist.q)}" autocomplete="off" enterkeyhint="search"></label>
       <div class="chips" role="group" aria-label="Фильтр по категории">
@@ -197,7 +213,7 @@
       const showLabel = isMonth ? b.today : (sel || b.current);
       const cls = ['bar', isMonth ? 'thin' : '', sel ? 'sel' : '', !isMonth && b.current ? 'cur' : '', b.future ? 'future' : '', over && !b.future ? 'over' : ''].join(' ');
       const tag = isMonth ? 'span' : 'button';
-      const attrs = isMonth ? `aria-hidden="true"` : `data-action="stats-sel" data-k="${b.key}" aria-pressed="${sel}" aria-label="${esc(Period.name(b.key))}: ${fmtR(b.value)}"`;
+      const attrs = isMonth ? `aria-hidden="true"` : `data-action="stats-sel" data-k="${b.key}" aria-pressed="${sel}" aria-label="${esc(PT(b.key))}: ${fmtR(b.value)}"`;
       return `<${tag} class="${cls}" ${attrs}><span class="v" style="visibility:${showLabel ? 'visible' : 'hidden'}">${Money.compact(b.value)}</span><span class="b" style="height:${h}px"></span></${tag}>`;
     }).join('');
     const labels = vm.bars.map((b, i) => {
@@ -210,14 +226,14 @@
     }).join('');
     const gap = isMonth ? 3 : mode === 'year' ? 6 : 12;
     const legend = vm.budgetLine > 0 ? `<span class="chart-legend"><i></i>${isMonth ? fmtR(vm.budgetLine) + ' в день' : 'бюджет ' + Money.format(vm.budgetLine, '', { noFraction: true })}</span>` : '';
-    const chartAria = isMonth ? `Расходы по дням за ${Period.name(vm.sel)}` : 'Расходы по месяцам';
+    const chartAria = isMonth ? `Расходы по дням, ${PT(vm.sel)}` : 'Расходы по месяцам';
 
     return `<h1 class="h1">Аналитика</h1>
       <div class="seg" role="group" aria-label="Период">
         ${[['month', 'Месяц'], ['6m', '6 месяцев'], ['year', 'Год']].map(([k, t]) => `<button aria-pressed="${mode === k}" data-action="stats-mode" data-m="${k}">${t}</button>`).join('')}
       </div>
       <section class="card pad" style="padding:16px 16px 12px;gap:10px" aria-label="${chartAria}">
-        <div class="sec-head"><span style="font-size:15px;font-weight:700">${isMonth ? 'По дням · ' + esc(Period.name(vm.sel)) : vm.chartTitle}</span>${legend}</div>
+        <div class="sec-head"><span style="font-size:15px;font-weight:700">${isMonth ? 'По дням · ' + esc(PT(vm.sel)) : vm.chartTitle}</span>${legend}</div>
         <div class="chart" style="--bar-gap:${gap}px">${vm.budgetLine > 0 ? `<div class="bline" style="bottom:${lineBottom}px"></div>` : ''}${bars}</div>
         <div class="xlabels" style="--bar-gap:${gap}px">${labels}</div>
       </section>
@@ -236,9 +252,9 @@
     const diff = total - d.prevTotal;
     let deltaLine = '';
     if (d.hasPrev) {
-      if (diff < 0) deltaLine = `<span style="font-size:13px;font-weight:600" class="good">↓ ${fmtR(-diff)} меньше, чем в ${Period.prep(d.prev)}</span>`;
-      else if (diff > 0) deltaLine = `<span style="font-size:13px;font-weight:600" class="bad">↑ ${fmtR(diff)} больше, чем в ${Period.prep(d.prev)}</span>`;
-      else deltaLine = `<span style="font-size:13px;font-weight:600;color:var(--muted)">как в ${Period.prep(d.prev)}</span>`;
+      if (diff < 0) deltaLine = `<span style="font-size:13px;font-weight:600" class="good">↓ ${fmtR(-diff)} меньше, чем ${PIN(d.prev)}</span>`;
+      else if (diff > 0) deltaLine = `<span style="font-size:13px;font-weight:600" class="bad">↑ ${fmtR(diff)} больше, чем ${PIN(d.prev)}</span>`;
+      else deltaLine = `<span style="font-size:13px;font-weight:600;color:var(--muted)">как ${PIN(d.prev)}</span>`;
     }
     const isCur = d.period === svc.currentPeriod(n);
     let budgetLine = '';
@@ -252,15 +268,15 @@
       let delta = '', cls = '';
       if (d.hasPrev) {
         const x = c.value - c.prev;
-        if (x === 0) { delta = '= как в ' + Period.short(d.prev).toLowerCase(); cls = ''; }
+        if (x === 0) { delta = '= без изменений'; cls = ''; }
         else { delta = (x < 0 ? '↓ ' : '↑ ') + Money.format(Math.abs(x), '', { noFraction: true }); cls = x < 0 ? 'good' : 'bad'; }
       }
       return `<div class="legend-row"><span class="dot" style="background:${c.cat.color}"></span><span class="n">${esc(c.cat.name)}</span><span class="val">${fmtR(c.value)}</span>${d.hasPrev ? `<span class="d ${cls}" style="${cls ? '' : 'color:var(--muted)'}">${delta}</span>` : ''}</div>`;
     }).join('') : `<p class="cap" style="margin:0">В этом месяце записей нет.</p>`;
     return `<section class="card pad" aria-label="Структура расходов">
       <div class="donut-wrap">
-        <div class="donut" role="img" aria-label="Структура расходов за ${esc(Period.name(d.period))}, ${pct} бюджета" style="background:${bg}"><div>${pct}</div></div>
-        <div class="donut-info"><span class="k">${esc(Period.title(d.period, n))}</span><span class="v">${fmtR(total)}</span>${deltaLine}${budgetLine}</div>
+        <div class="donut" role="img" aria-label="Структура расходов, ${esc(PT(d.period))}, ${pct} бюджета" style="background:${bg}"><div>${pct}</div></div>
+        <div class="donut-info"><span class="k">${esc(PT(d.period))}</span><span class="v">${fmtR(total)}</span>${deltaLine}${budgetLine}</div>
       </div>
       <div>${rows}</div></section>`;
   }
@@ -269,13 +285,12 @@
   function screenBudget() {
     const n = now();
     const vm = svc.budget(S.period);
-    const monthLower = Period.name(S.period).toLowerCase();
     const segs = vm.rows.filter((r) => r.limit > 0).map((r) => `<div style="flex:${r.limit};background:${r.cat.color}"></div>`).join('')
       + (vm.free > 0 ? `<div style="flex:${vm.free};background:var(--track)"></div>` : '');
     return `<div class="head"><h1 class="h1">Бюджет</h1>
-        <button class="pill-btn" data-action="copy-prev" ${vm.canCopy ? '' : 'disabled'}>${svg(P.copy, 16)}Как в ${esc(Period.prep(vm.prev))}</button></div>
+        <button class="pill-btn" data-action="copy-prev" ${vm.canCopy ? '' : 'disabled'}>${svg(P.copy, 16)}${st.startDay === 1 ? 'Как в ' + esc(Period.prep(vm.prev)) : 'Как в прошлом'}</button></div>
       <section class="card pad">
-        <div class="sec-head" style="align-items:center"><span style="font-size:14px;color:var(--ink-2);font-weight:500">Общий бюджет на ${esc(monthLower)}</span>
+        <div class="sec-head" style="align-items:center"><span style="font-size:14px;color:var(--ink-2);font-weight:500">Общий бюджет ${esc(PFOR(S.period))}</span>
           <button class="text-btn" style="font-size:13px;font-weight:600;min-height:28px;padding:0" data-action="edit-total">Изменить</button></div>
         <div class="big-amount">${fmtR(vm.total)}</div>
         <div class="dist" role="img" aria-label="Распределение бюджета по категориям">${segs}</div>
@@ -298,13 +313,89 @@
 
   const shortName = (name) => (name.length > 11 && name.includes(' ') ? name.split(' ')[0] : name);
 
+  // ============================================================ Жесты ===
+  /**
+   * Закрытие свайпом, как в приложениях iOS: лист тянется вниз, экран настроек — вправо.
+   * Жест начинается только когда движение явно идёт по нужной оси, поэтому прокрутка
+   * и горизонтальные ленты внутри не ломаются. Короткий рывок тоже закрывает.
+   */
+  let suppressClickUntil = 0;
+  function attachSwipeDismiss(node, { axis, canStart, onDismiss, scrim }) {
+    if (!node) return;
+    const isY = axis === 'y';
+    let start = null, dragging = false, last = 0, lastT = 0, speed = 0;
+
+    const begin = (x, y, target) => {
+      if (target.closest('input, textarea, select')) return;
+      start = { x, y, t: performance.now(), allowed: canStart(target) };
+      dragging = false; last = 0; speed = 0;
+    };
+    const move = (x, y, ev) => {
+      if (!start) return;
+      const d = isY ? y - start.y : x - start.x;
+      const cross = isY ? Math.abs(x - start.x) : Math.abs(y - start.y);
+      if (!dragging) {
+        if (!start.allowed) return;
+        if (Math.abs(d) < 8 && cross < 8) return;          // ещё непонятно, куда движение
+        if (d <= 0 || cross > Math.abs(d)) { start = null; return; } // вверх или вбок — это прокрутка, не жест
+        dragging = true;
+        node.style.transition = 'none';
+        if (scrim) scrim.style.transition = 'none';
+      }
+      if (ev && ev.cancelable) ev.preventDefault();
+      const now2 = performance.now();
+      speed = (d - last) / Math.max(1, now2 - lastT);
+      last = d; lastT = now2;
+      const off = Math.max(0, d);
+      node.style.transform = isY ? `translateY(${off}px)` : `translateX(${off}px)`;
+      if (scrim) scrim.style.opacity = String(Math.max(0, 1 - off / (node.offsetHeight || 600)));
+    };
+    const end = () => {
+      if (!start) return;
+      const wasDragging = dragging;
+      start = null; dragging = false;
+      if (!wasDragging) return;
+      suppressClickUntil = performance.now() + 350;
+      const size = isY ? node.offsetHeight : node.offsetWidth;
+      node.style.transition = '';
+      if (scrim) { scrim.style.transition = ''; scrim.style.opacity = ''; }
+      if (last > Math.min(140, size * 0.3) || (speed > 0.5 && last > 30)) {
+        node.style.transform = '';
+        onDismiss();
+      } else {
+        node.style.transform = '';
+      }
+    };
+
+    node.addEventListener('touchstart', (e) => { if (e.touches.length === 1) begin(e.touches[0].clientX, e.touches[0].clientY, e.target); }, { passive: true });
+    node.addEventListener('touchmove', (e) => { if (e.touches.length === 1) move(e.touches[0].clientX, e.touches[0].clientY, e); }, { passive: false });
+    node.addEventListener('touchend', end);
+    node.addEventListener('touchcancel', end);
+    // Мышь (симуляция на компьютере): тянуть за ручку листа или за край экрана настроек
+    node.addEventListener('mousedown', (e) => {
+      if (e.button !== 0 || !e.target.closest(isY ? '.grabber-zone, .sheet-head' : '.page-body')) return;
+      begin(e.clientX, e.clientY, e.target);
+      const mm = (ev) => move(ev.clientX, ev.clientY, ev);
+      const mu = () => { end(); window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', mu); };
+      window.addEventListener('mousemove', mm); window.addEventListener('mouseup', mu);
+    });
+  }
+
   // ================================================================ Листы ===
   function openSheet(sheet) {
     S.sheet = sheet;
-    const short = ['month', 'amount', 'confirm', 'backup'].includes(sheet.type);
+    const short = ['month', 'amount', 'confirm', 'backup', 'currency'].includes(sheet.type);
     el.sheetLayer.innerHTML = `<button class="scrim" data-action="close-sheet" aria-label="Закрыть" tabindex="-1"></button>
-      <div class="sheet${short ? ' short' : ''}" role="dialog" aria-modal="true"><div class="sheet-body"></div></div>`;
+      <div class="sheet${short ? ' short' : ''}" role="dialog" aria-modal="true"><div class="grabber-zone" aria-hidden="true"><div class="grabber"></div></div><div class="sheet-body"></div></div>`;
     renderSheet();
+    const sheetEl = el.sheetLayer.querySelector('.sheet');
+    attachSwipeDismiss(sheetEl, {
+      axis: 'y',
+      scrim: el.sheetLayer.querySelector('.scrim'),
+      // тянуть можно за ручку и заголовок, а по содержимому — только когда оно прокручено к началу
+      canStart: (target) => !!target.closest('.grabber-zone, .sheet-head') || sheetEl.querySelector('.sheet-body').scrollTop <= 0,
+      onDismiss: closeSheet
+    });
     el.sheetLayer.getBoundingClientRect(); // старт анимации
     el.sheetLayer.classList.add('on');
   }
@@ -397,7 +488,7 @@
       </div>
       ${keypad()}
       <button class="btn-primary" data-action="save-exp" ${amount > 0 && s.catId ? '' : 'disabled'}>Сохранить</button>
-      ${s.id ? `<button class="btn-danger${s.confirmDel ? ' confirm' : ''}" data-action="del-exp">${s.confirmDel ? 'Нажмите ещё раз, чтобы удалить' : 'Удалить запись'}</button>` : ''}`;
+      ${s.id && !s.savings ? `<button class="btn-danger${s.confirmDel ? ' confirm' : ''}" data-action="del-exp">${s.confirmDel ? 'Нажмите ещё раз, чтобы удалить' : 'Удалить запись'}</button>` : ''}`;
   }
 
   function expenseInfo(s, amount) {
@@ -421,10 +512,10 @@
         ${limit > 0 ? bar() + `<span class="txt">Было ${fmtR(spent)} → станет <b>${fmtR(after)} из ${fmtR(limit)}</b></span>` : ''}${status}</div>`;
     }
     if (limit <= 0) {
-      return `<div class="info"><div class="top">Лимит не задан</div><span class="txt">В ${Period.prep(period)} на «${esc(cat.name)}» потрачено <b>${fmtR(spent)}</b>${amount ? `, станет <b>${fmtR(after)}</b>` : ''}</span></div>`;
+      return `<div class="info"><div class="top">Лимит не задан</div><span class="txt">${cap1(PIN(period))} на «${esc(cat.name)}» потрачено <b>${fmtR(spent)}</b>${amount ? `, станет <b>${fmtR(after)}</b>` : ''}</span></div>`;
     }
     const overBy = after - limit;
-    return `<div class="info"><div class="top">Лимит в ${Period.prep(period)} · ${esc(cat.name)}</div>
+    return `<div class="info"><div class="top">Лимит ${PIN(period)} · ${esc(cat.name)}</div>
       ${bar(overBy > 0 ? '#C9541E' : null)}
       <span class="txt">Было ${fmtR(spent)} → станет <b>${fmtR(after)} из ${fmtR(limit)}</b></span>
       ${overBy > 0 ? `<div class="wr">${svg(P.alert, 18, 2)}Лимит будет превышен на ${fmtR(overBy)}</div>` : `<span class="txt">Останется <b>${fmtR(limit - after)}</b></span>`}</div>`;
@@ -442,7 +533,7 @@
     } catch (e) { toast(e.message, true); return; }
     let msg = s.id ? 'Запись обновлена' : 'Запись сохранена';
     if (before.cat.mandatory && before.limit > 0 && before.spent < before.limit && before.spent + amount >= before.limit) msg = `Платёж «${before.cat.name}» отмечен`;
-    else if (period !== S.period) msg += ' в ' + Period.prep(period);
+    else if (period !== S.period) msg += ' ' + PIN(period);
     closeSheet();
     render();
     toast(msg);
@@ -454,7 +545,7 @@
     if (id) {
       const c = svc.category(id);
       const limit = svc.budget(S.period).rows.find((r) => r.cat.id === id)?.limit || 0;
-      openSheet({ type: 'category', id, name: c.name, color: c.color, limit: limit ? Money.format(limit, '', { noFraction: true }) : '', mandatory: c.mandatory, dueDay: c.dueDay || 15, remindDays: c.remindDays ?? st.remindDays, origLimit: limit });
+      openSheet({ type: 'category', id, name: c.name, color: c.color, limit: limit ? Money.format(limit, '', { noFraction: true }) : '', mandatory: c.mandatory, savings: c.savings, dueDay: c.dueDay || 15, remindDays: c.remindDays ?? st.remindDays, origLimit: limit });
     } else {
       const used = new Set(svc.categoryList().map((c) => c.color));
       const color = (PALETTE.find(([c]) => !used.has(c)) || PALETTE[0])[0];
@@ -481,7 +572,7 @@
           `<button class="swatch" role="radio" aria-checked="${c === s.color}" aria-label="${label}" data-action="pick-color" data-c="${c}" style="background:${c};box-shadow:${c === s.color ? `0 0 0 3px var(--bg), 0 0 0 5px ${c}` : 'none'}"></button>`).join('')}</div></div>
       <label class="field" for="cat-limit"><span>Лимит на месяц</span>
         <span class="input-money"><input id="cat-limit" type="text" inputmode="decimal" value="${esc(s.limit)}" placeholder="0" autocomplete="off" enterkeyhint="done"><span>${esc(st.sym)}</span></span>
-        <span style="font-size:12px;color:${free < 0 ? 'var(--warn)' : 'var(--ink-2)'}">${free >= 0 ? `Свободно в бюджете на ${Period.name(S.period).toLowerCase()}: ${fmtR(free)}` : `Бюджет на ${Period.name(S.period).toLowerCase()} уже распределён с превышением на ${fmtR(-free)}`}</span></label>
+        <span style="font-size:12px;color:${free < 0 ? 'var(--warn)' : 'var(--ink-2)'}">${free >= 0 ? `Свободно в бюджете ${PFOR(S.period)}: ${fmtR(free)}` : `Бюджет ${PFOR(S.period)} уже распределён с превышением на ${fmtR(-free)}`}</span></label>
       <div class="card" style="padding:4px 14px;border-radius:18px">
         <div style="display:flex;align-items:center;gap:12px;padding:12px 0;${s.mandatory ? 'border-bottom:1px solid var(--line)' : ''}">
           <div style="flex:1;display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:700" id="must-l">Обязательный платёж</span>
@@ -490,14 +581,15 @@
         </div>
         ${s.mandatory ? `
           <div class="opt-row"><span>Нужно внести не меньше</span><span style="font-weight:700" id="cat-req">${fmtR(limit)}</span></div>
-          <label class="opt-row" for="cat-due"><span>Срок</span><span class="val">до ${s.dueDay} числа</span>
+          <label class="opt-row" for="cat-due"><span>Срок</span><span class="val">до ${s.dueDay} числа${st.startDay !== 1 ? ' · ' + Labels.shortDate(BudgetMath.dueDate(S.period, st.startDay, s.dueDay)) : ''}</span>
             <select id="cat-due" aria-label="Срок платежа">${Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}"${i + 1 === s.dueDay ? ' selected' : ''}>до ${i + 1} числа</option>`).join('')}</select></label>
           <label class="opt-row" for="cat-remind"><span>Напомнить</span><span class="val">${(reminds.find(([d]) => d === s.remindDays) || reminds[2])[1]}</span>
             <select id="cat-remind" aria-label="Когда напомнить">${reminds.map(([d, t]) => `<option value="${d}"${d === s.remindDays ? ' selected' : ''}>${t}</option>`).join('')}</select></label>` : ''}
       </div>
+      ${s.savings ? `<p class="cap" style="margin:0">Все взносы в эту категорию копятся в «Всего отложено» на главной. Стартовую сумму можно поменять в настройках.</p>` : ''}
       <div style="flex:1"></div>
       <button class="btn-primary" data-action="save-cat">${s.id ? 'Сохранить' : 'Создать категорию'}</button>
-      ${s.id ? `<button class="btn-danger${s.confirmDel ? ' confirm' : ''}" data-action="del-cat">${s.confirmDel ? 'Нажмите ещё раз: ' + delText.toLowerCase() : 'Удалить категорию'}</button>` : ''}`;
+      ${s.id && !s.savings ? `<button class="btn-danger${s.confirmDel ? ' confirm' : ''}" data-action="del-cat">${s.confirmDel ? 'Нажмите ещё раз: ' + delText.toLowerCase() : 'Удалить категорию'}</button>` : ''}`;
   }
 
   function saveCategory() {
@@ -521,7 +613,7 @@
     return `${sheetHead('Месяц')}<div class="card" role="radiogroup" aria-label="Месяц">${list.map((p) => {
       const sum = svc.history(p, {}).total;
       return `<button class="radio-row" role="radio" aria-checked="${p === S.period}" data-action="set-period" data-p="${p}">
-        <span class="nm" style="font-weight:${p === S.period ? 700 : 500}">${esc(Period.title(p, n))}${p === svc.currentPeriod(n) ? ' <span style="color:var(--muted);font-weight:500">· текущий</span>' : ''}</span>
+        <span class="nm" style="font-weight:${p === S.period ? 700 : 500}">${esc(PT(p))}${p === svc.currentPeriod(n) ? ' <span style="color:var(--muted);font-weight:500">· текущий</span>' : ''}</span>
         <span class="cd">${fmtR(sum)}</span><span class="ck">${svg(P.check, 18, 2.6, 'var(--link)')}</span></button>`;
     }).join('')}</div>`;
   }
@@ -550,13 +642,45 @@
       <p class="cap" style="margin:0">Восстановление заменит все текущие данные на данные из копии.</p>`;
   }
 
-  const SHEETS = { expense: expenseSheet, category: categorySheet, amount: amountSheet, month: monthSheet, confirm: confirmSheet, backup: backupSheet };
+  function fmtRate(x) {
+    const d = x >= 100 ? 1 : x >= 10 ? 2 : x >= 1 ? 3 : 4;
+    return x.toFixed(d).replace('.', ',');
+  }
+
+  function currencySheet() {
+    const s = S.sheet;
+    const to = CURRENCIES.find((c) => c.code === s.to);
+    if (s.loading) {
+      return `${sheetHead('Смена валюты')}<div class="empty" style="background:transparent;padding:30px 10px"><div class="spinner" aria-hidden="true"></div><div class="s">Получаю курс ${esc(st.currency.code)} → ${esc(to.code)}…</div></div>`;
+    }
+    const pl = s.plan;
+    if (!pl) {
+      return `${sheetHead('Смена валюты')}<div class="empty"><div class="t">Нет курса для перевода в ${esc(to.inForm)}</div><div class="s">Подключитесь к интернету и попробуйте ещё раз.</div></div>`;
+    }
+    const big = pl.rate >= 1 ? `1 ${esc(pl.from.sym)} = ${fmtRate(pl.rate)} ${esc(pl.to.sym)}` : `1 ${esc(pl.to.sym)} = ${fmtRate(pl.reverse)} ${esc(pl.from.sym)}`;
+    const when = Labels.longDate(Dates.parseDay(pl.date));
+    const srcLine = pl.builtin
+      ? `Встроенный курс от ${when}: приложение ещё ни разу не получало курс из сети.`
+      : `${esc(pl.source)}, курс от ${when}.${s.online ? '' : ' Нет интернета, взят последний сохранённый курс.'}`;
+    return `${sheetHead('Смена валюты')}
+      <h1 style="margin:2px 0 0;font-size:22px;font-weight:800;text-align:center">Перевести бюджет в ${esc(to.inForm)}?</h1>
+      <div class="sample" style="justify-content:center"><span style="font-size:22px;color:#FFFFFF;font-weight:800">${big}</span></div>
+      <p class="cap" style="margin:0;text-align:center;font-size:13px;${s.online || pl.builtin ? '' : 'color:var(--warn)'}">${srcLine}</p>
+      <div class="card" style="border-radius:18px;padding:0 16px">
+        <div class="opt-row"><span>Бюджет ${esc(PFOR(pl.period))}</span><span style="font-weight:700;white-space:nowrap">${Money.format(pl.totalBefore, pl.from.sym, { noFraction: true })} → ${Money.format(pl.totalAfter, pl.to.sym, { noFraction: true })}</span></div>
+      </div>
+      <p class="cap" style="margin:0">Пересчитаются общий бюджет, лимиты категорий с текущего месяца и стартовая сумма отложенного. Прошлые записи и прошлые месяцы останутся без изменений.</p>
+      <button class="btn-primary" data-action="convert-ok">Перевести в ${esc(to.code)}</button>`;
+  }
+
+  const SHEETS = { currency: currencySheet, expense: expenseSheet, category: categorySheet, amount: amountSheet, month: monthSheet, confirm: confirmSheet, backup: backupSheet };
 
   // ============================================================ Настройки ===
   function openSettings() {
     S.page = 'settings';
     el.pageLayer.innerHTML = `<div class="page" role="dialog" aria-modal="true" aria-label="Настройки"><div class="page-body"></div></div>`;
     renderPage();
+    attachSwipeDismiss(el.pageLayer.querySelector('.page'), { axis: 'x', canStart: () => true, onDismiss: closeSettings });
     el.pageLayer.getBoundingClientRect();
     el.pageLayer.classList.add('on');
   }
@@ -579,7 +703,12 @@
       <div class="card" role="radiogroup" aria-label="Валюта" style="border-radius:18px;padding:0 16px">${CURRENCIES.map((c) =>
         `<button class="radio-row" role="radio" aria-checked="${c.code === st.currency.code}" data-action="set-currency" data-code="${c.code}">
           <span class="sym">${esc(c.sym)}</span><span class="nm">${esc(c.name)}</span><span class="cd">${c.code}</span><span class="ck">${svg(P.check, 18, 2.6, 'var(--link)')}</span></button>`).join('')}</div>
-      <p class="cap" style="margin:0 4px 6px">Меняется только знак валюты, суммы по курсу не пересчитываются.</p>
+      <p class="cap" style="margin:0 4px 6px">При смене валюты бюджет и лимиты с текущего месяца пересчитываются по курсу. Записи прошлых трат остаются как были. ${rateNote()}</p>
+      <h2 class="label-up">Отложенные</h2>
+      <div class="card" style="border-radius:18px;padding:0 16px">
+        <div class="opt-row"><span>Было отложено до начала учёта</span><span class="val">${fmtR(st.savingsInitial)}</span><button class="cover" data-action="edit-savings" aria-label="Изменить стартовую сумму отложенного"></button></div>
+      </div>
+      <p class="cap" style="margin:0 4px 6px">Всего отложено = эта сумма + все взносы в категорию «Отложенные».</p>
       <h2 class="label-up">Месяц и напоминания</h2>
       <div class="card" style="border-radius:18px;padding:0 16px">
         <label class="opt-row" for="set-start"><span>Начало месяца</span><span class="val">${st.startDay} число</span>
@@ -587,7 +716,7 @@
         <label class="opt-row" for="set-remind"><span>Напоминать о платежах</span><span class="val">${(reminds.find(([d]) => d === st.remindDays) || reminds[2])[1]}</span>
           <select id="set-remind" aria-label="Напоминание по умолчанию">${reminds.map(([d, t]) => `<option value="${d}"${d === st.remindDays ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
       </div>
-      <p class="cap" style="margin:0 4px 6px">Начало месяца удобно поставить на день зарплаты. Напоминание задаётся для новых обязательных категорий.</p>
+      <p class="cap" style="margin:0 4px 6px">${st.startDay === 1 ? 'Если зарплата приходит не 1-го, поставьте день зарплаты: например, при 6 числе месяц станет «6 окт – 5 ноя», и сроки платежей будут считаться внутри него.' : `Сейчас месяц: ${esc(PT(svc.currentPeriod(now())))}. Срок «до 10 числа» означает ${esc(Labels.longDate(BudgetMath.dueDate(svc.currentPeriod(now()), st.startDay, 10)))}, «до 3 числа» — ${esc(Labels.longDate(BudgetMath.dueDate(svc.currentPeriod(now()), st.startDay, 3)))}.`} Напоминание задаётся для новых обязательных категорий.</p>
       <h2 class="label-up">Данные</h2>
       <div class="card" style="border-radius:18px;padding:0 16px">
         <div class="opt-row"><span>Резервная копия</span><span class="val">${svg(P.right, 18, 2.2, 'var(--muted)')}</span><button class="cover" data-action="open-backup" aria-label="Резервная копия"></button></div>
@@ -598,12 +727,20 @@
         <p class="cap" style="margin:0">Все данные хранятся только на этом устройстве, в базе SQLite. В базе ${count} ${plural(count, ['запись', 'записи', 'записей'])}.${svc.db.store.unavailable ? ' <b style="color:var(--warn)">Хранилище недоступно — изменения не сохранятся после закрытия.</b>' : ''}</p></div>`;
   }
 
+  /** Подпись про сохранённый курс в настройках */
+  function rateNote() {
+    const r = svc.rates().get(st.currency.code === 'EUR' ? 'USD' : st.currency.code);
+    if (!r) return '';
+    const d = Dates.parseDay(r.rate_date);
+    return r.source === 'builtin' ? 'Курс ещё не загружался из сети.' : `Сохранённый курс от ${Labels.longDate(d)}.`;
+  }
+
   // ============================================================ Онбординг ===
   function renderOnboarding() {
-    const o = S.onb || (S.onb = { step: 0, currency: DEFAULT_CURRENCY, amount: '', presets: PRESETS.map((p) => ({ ...p })) });
+    const o = S.onb || (S.onb = { step: 0, currency: DEFAULT_CURRENCY, amount: '', sav: { amount: '' }, presets: PRESETS.map((p) => ({ ...p })) });
     const sym = (CURRENCIES.find((c) => c.code === o.currency) || CURRENCIES[0]).sym;
     st = { ...st, sym };
-    const steps = (k) => `<div class="steps" aria-label="Шаг ${k} из 3">${[1, 2, 3].map((i) => `<i class="${i <= k ? 'on' : ''}"></i>`).join('')}</div>`;
+    const steps = (k) => `<div class="steps" aria-label="Шаг ${k} из 4">${[1, 2, 3, 4].map((i) => `<i class="${i <= k ? 'on' : ''}"></i>`).join('')}</div>`;
     const backBtn = `<button class="back" data-action="onb-back" style="align-self:flex-start">${svg(P.back, 24, 2.2)}Назад</button>`;
     let body = '', foot = '';
     if (o.step === 0) {
@@ -626,22 +763,33 @@
       body = `${backBtn}${steps(2)}<h1>Сколько тратите в месяц?</h1><p>Всё вместе, включая аренду и другие обязательные платежи.</p>
         ${amountDisplay(o.amount)}<div style="flex:1"></div>${keypad()}`;
       foot = `<button class="btn-primary" data-action="onb-next" ${Money.parse(o.amount) > 0 ? '' : 'disabled'}>Дальше</button>`;
+    } else if (o.step === 3) {
+      body = `${backBtn}${steps(3)}<h1>Сколько уже отложено?</h1><p>Деньги, которые у вас уже есть в копилке или на вкладе. Дальше к ним будут прибавляться взносы в категорию «Отложенные».</p>
+        ${amountDisplay(o.sav.amount)}<div style="flex:1"></div>${keypad()}`;
+      foot = `<button class="btn-primary" data-action="onb-next">${Money.parse(o.sav.amount) > 0 ? 'Дальше' : 'Пока ничего, дальше'}</button>`;
     } else {
       const total = Money.parse(o.amount);
       const on = o.presets.filter((p) => p.on);
       const shareSum = on.reduce((s, p) => s + p.share, 0) || 1;
-      body = `${backBtn}${steps(3)}<h1>Категории</h1><p>Бюджет распределим по категориям автоматически. Лимиты и список можно поменять в любой момент.</p>
+      body = `${backBtn}${steps(4)}<h1>Категории</h1><p>Бюджет распределим по категориям автоматически. Лимиты и список можно поменять в любой момент.</p>
         <div class="card" style="border-radius:18px;padding:0 16px">${o.presets.map((p, i) => {
           const lim = p.on ? Math.floor(total * p.share / shareSum / 10000) * 10000 : 0;
-          return `<button class="check-row" role="checkbox" aria-checked="${p.on}" data-action="onb-preset" data-i="${i}">
+          return `<button class="check-row" role="checkbox" aria-checked="${p.on}" ${p.locked ? 'aria-disabled="true"' : `data-action="onb-preset" data-i="${i}"`}>
             <span class="box">${p.on ? svg(P.check, 16, 3, '#FFFFFF') : ''}</span>${ava({ color: p.color, letter: p.name[0] })}
-            <span style="flex:1;min-width:0;display:flex;align-items:center;gap:6px"><span style="font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</span>${p.mandatory ? '<span class="tag">ОБЯЗ.</span>' : ''}</span>
+            <span style="flex:1;min-width:0;display:flex;align-items:center;gap:6px"><span style="font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</span>${p.locked ? '<span class="tag" style="background:var(--teal)">ВСЕГДА</span>' : p.mandatory ? '<span class="tag">ОБЯЗ.</span>' : ''}</span>
             <span style="font-size:14px;font-weight:600;color:var(--muted);white-space:nowrap">${p.on ? Money.format(lim, sym, { noFraction: true }) : ''}</span></button>`;
         }).join('')}</div>`;
       foot = `<button class="btn-primary" data-action="onb-finish" ${on.length ? '' : 'disabled'}>Начать</button>`;
     }
     el.onb.innerHTML = `<div class="onb-body">${body}</div><div class="onb-foot">${foot}</div>`;
     el.onb.hidden = false;
+  }
+
+  /** Куда идут нажатия цифровой клавиатуры: открытый лист или шаг первой настройки */
+  function keyTarget() {
+    if (S.sheet && (S.sheet.type === 'expense' || S.sheet.type === 'amount')) return S.sheet;
+    if (S.onb && el.app.hidden) { if (S.onb.step === 2) return S.onb; if (S.onb.step === 3) return S.onb.sav; }
+    return null;
   }
 
   // ================================================================ Рендер ===
@@ -694,9 +842,9 @@
     'edit-exp'(t) { openExpense({ id: +t.dataset.id }); },
     'pick-cat'(t) { S.sheet.catId = +t.dataset.id; renderSheet(); },
     key(t) {
-      const target = S.sheet && (S.sheet.type === 'expense' || S.sheet.type === 'amount') ? S.sheet : (S.onb && S.onb.step === 2 && !st.onboarded ? S.onb : null);
+      const target = keyTarget();
       if (!target || !pressKey(target, t.dataset.k)) return;
-      if (target === S.onb) renderOnboarding(); else renderSheet();
+      if (target === S.onb || (S.onb && target === S.onb.sav)) renderOnboarding(); else renderSheet();
     },
     'save-exp'() { saveExpense(); },
     'del-exp'() {
@@ -717,17 +865,38 @@
     },
     'edit-total'() {
       const vm = svc.budget(S.period);
-      openSheet({ type: 'amount', title: 'Бюджет на ' + Period.name(S.period).toLowerCase(), amount: vm.total ? Money.toInput(vm.total) : '', hint: 'Общая сумма на месяц, включая обязательные платежи' });
+      openSheet({ type: 'amount', title: 'Бюджет ' + PFOR(S.period), amount: vm.total ? Money.toInput(vm.total) : '', hint: 'Общая сумма на месяц, включая обязательные платежи' });
     },
-    'save-amount'() { svc.setTotal(S.period, Money.parse(S.sheet.amount)); closeSheet(); render(); toast('Бюджет обновлён'); },
+    'save-amount'() {
+      const v = Money.parse(S.sheet.amount);
+      if (S.sheet.kind === 'savings') { svc.setSavingsInitial(v); closeSheet(); render(); toast('Стартовая сумма сохранена'); return; }
+      svc.setTotal(S.period, v); closeSheet(); render(); toast('Бюджет обновлён');
+    },
+    'edit-savings'() {
+      openSheet({ type: 'amount', kind: 'savings', title: 'Было отложено', amount: st.savingsInitial ? Money.toInput(st.savingsInitial) : '', hint: 'Сумма, которая уже была отложена до начала учёта в приложении' });
+    },
     'copy-prev'() {
       const vm = svc.budget(S.period);
       openSheet({ type: 'confirm', title: 'Скопировать лимиты?',
-        text: `Общий бюджет и лимиты на ${Period.name(S.period).toLowerCase()} станут такими же, как в ${Period.prep(vm.prev)}.`, ok: 'Скопировать',
+        text: `Общий бюджет и лимиты ${PFOR(S.period)} станут такими же, как ${PIN(vm.prev)}.`, ok: 'Скопировать',
         run: () => { svc.copyFrom(vm.prev, S.period); toast('Лимиты скопированы'); } });
     },
     'confirm-ok'() { const run = S.sheet.run; closeSheet(); Promise.resolve(run()).then(render); },
-    'set-currency'(t) { svc.setSetting('currency', t.dataset.code); render(); },
+    'set-currency'(t) {
+      const code = t.dataset.code;
+      if (code === st.currency.code) return;
+      openSheet({ type: 'currency', to: code, loading: true });
+      svc.freshRates().then(({ rates, online }) => {
+        if (!S.sheet || S.sheet.type !== 'currency' || S.sheet.to !== code) return;
+        Object.assign(S.sheet, { loading: false, online, plan: svc.conversionPlan(code, rates, now()) });
+        renderSheet();
+      });
+    },
+    'convert-ok'() {
+      const plan = S.sheet.plan;
+      if (!plan) return;
+      svc.changeCurrency(plan); closeSheet(); render(); toast('Бюджет переведён в ' + plan.to.inForm);
+    },
     'open-backup'() { openSheet({ type: 'backup', text: '' }); },
     'ask-demo'() {
       openSheet({ type: 'confirm', title: 'Загрузить демо-данные?', text: 'Текущие записи, категории и лимиты будут заменены примером за полгода.', ok: 'Загрузить', danger: true,
@@ -775,7 +944,7 @@
     async 'onb-demo'() { await svc.loadDemo(now()); S.period = svc.currentPeriod(now()); S.onb = null; render(); toast('Демо-данные загружены'); },
     'onb-finish'() {
       const o = S.onb;
-      svc.completeOnboarding({ currency: o.currency, total: Money.parse(o.amount), presets: o.presets }, now());
+      svc.completeOnboarding({ currency: o.currency, total: Money.parse(o.amount), presets: o.presets, savingsInitial: Money.parse(o.sav.amount) }, now());
       S.period = svc.currentPeriod(now()); S.onb = null; S.tab = 'main'; render(); toast('Готово! Добавьте первую трату кнопкой «+»');
     }
   };
@@ -783,6 +952,7 @@
   async function restore(bytes) {
     try {
       await svc.db.replaceWith(bytes);
+      svc.ensureSavingsCategory();
       S.period = svc.currentPeriod(now()); S.hist = { cat: 0, q: '' };
       closeSheet(); render(); toast('Данные восстановлены');
     } catch (e) { toast(e.message || 'Файл не подходит', true); }
@@ -832,12 +1002,12 @@
       if (e.key === 'Enter' && (e.target.dataset.lim || e.target.id === 'exp-note' || e.target.id === 'cat-name' || e.target.id === 'cat-limit')) e.target.blur();
       return;
     }
-    const target = S.sheet && (S.sheet.type === 'expense' || S.sheet.type === 'amount') ? S.sheet : (S.onb && S.onb.step === 2 && el.app.hidden ? S.onb : null);
+    const target = keyTarget();
     if (!target) return;
     let k = null;
     if (/^\d$/.test(e.key)) k = e.key; else if (e.key === ',' || e.key === '.') k = ','; else if (e.key === 'Backspace') k = 'del';
     else if (e.key === 'Enter') { if (target === S.sheet && S.sheet.type === 'expense') saveExpense(); else if (target === S.sheet) A['save-amount'](); return; }
-    if (k && pressKey(target, k)) { e.preventDefault(); if (target === S.onb) renderOnboarding(); else renderSheet(); }
+    if (k && pressKey(target, k)) { e.preventDefault(); if (target === S.onb || (S.onb && target === S.onb.sav)) renderOnboarding(); else renderSheet(); }
   }
 
   // ================================================================ Старт ===
@@ -866,6 +1036,7 @@
     el.toast = document.getElementById('toast');
 
     el.device.addEventListener('click', (e) => {
+      if (performance.now() < suppressClickUntil) { e.preventDefault(); e.stopPropagation(); return; }
       const t = e.target.closest('[data-action]');
       if (!t || t.disabled) return;
       const fn = A[t.dataset.action];
@@ -910,6 +1081,7 @@
       const SQL = await loadSql();
       const db = await new window.Infra.SqliteDatabase(SQL, new window.Infra.DeviceFileStore('budget-app')).open();
       svc = new BudgetService(db);
+      svc.ensureSavingsCategory();
       S.period = svc.currentPeriod(now());
       buildShell();
       render();
@@ -920,6 +1092,10 @@
         else if (Dates.dayKey(now()) !== lastDay) { lastDay = Dates.dayKey(now()); S.period = svc.currentPeriod(now()); render(); }
       });
       window.addEventListener('pagehide', () => db.flush());
+      // Курсы: как только есть интернет — один раз за сеанс обновляем сохранённые в базе
+      const syncRates = () => svc.syncRatesOnce(now()).then((ok) => { if (ok && S.page) renderPage(); });
+      window.addEventListener('online', syncRates);
+      if (navigator.onLine !== false) setTimeout(syncRates, 1500);
     } catch (e) {
       console.error(e);
       el.device.innerHTML = `<div class="boot"><span class="err">Не удалось запустить базу данных</span><span>${esc(e.message || e)}</span></div>`;

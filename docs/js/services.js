@@ -5,19 +5,19 @@
    ========================================================================== */
 (function (root) {
   'use strict';
-  const { Dates, Period, BudgetMath, Money } = root.Domain;
+  const { Dates, Period, PeriodLabel, Fx, BudgetMath, Money } = root.Domain;
   const I = root.Infra;
 
   const CURRENCIES = [
-    { code: 'RUB', sym: '₽', name: 'Российский рубль' },
-    { code: 'USD', sym: '$', name: 'Доллар США' },
-    { code: 'EUR', sym: '€', name: 'Евро' },
-    { code: 'PLN', sym: 'zł', name: 'Польский злотый' },
-    { code: 'KZT', sym: '₸', name: 'Казахстанский тенге' },
-    { code: 'UAH', sym: '₴', name: 'Украинская гривна' },
-    { code: 'BYN', sym: 'Br', name: 'Белорусский рубль' },
-    { code: 'GEL', sym: '₾', name: 'Грузинский лари' }
+    { code: 'UAH', sym: '₴', name: 'Украинская гривна', inForm: 'гривны' },
+    { code: 'USD', sym: '$', name: 'Доллар США', inForm: 'доллары' },
+    { code: 'EUR', sym: '€', name: 'Евро', inForm: 'евро' },
+    { code: 'PLN', sym: 'zł', name: 'Польский злотый', inForm: 'злотые' },
+    { code: 'KZT', sym: '₸', name: 'Казахстанский тенге', inForm: 'тенге' },
+    { code: 'GEL', sym: '₾', name: 'Грузинский лари', inForm: 'лари' }
   ];
+
+  const RATE_SOURCES = { ecb: 'ЕЦБ', erapi: 'ExchangeRate-API', builtin: 'встроенный курс' };
 
   /** Валюта по умолчанию для новых пользователей */
   const DEFAULT_CURRENCY = 'UAH';
@@ -30,7 +30,7 @@
   /** Готовый набор категорий для первой настройки (доли от бюджета) */
   const PRESETS = [
     { key: 'home', name: 'Жильё', color: '#2B3A55', share: 0.375, mandatory: true, dueDay: 5, on: true },
-    { key: 'save', name: 'Накопления', color: '#0F766E', share: 0.06, mandatory: true, dueDay: 15, on: true },
+    { key: 'save', name: 'Отложенные', color: '#0F766E', share: 0.06, mandatory: true, dueDay: 15, savings: true, on: true, locked: true },
     { key: 'food', name: 'Продукты', color: '#23805E', share: 0.21, on: true },
     { key: 'cafe', name: 'Кафе и рестораны', color: '#B84A17', share: 0.1, on: true },
     { key: 'fun', name: 'Развлечения', color: '#6A4FCC', share: 0.1, on: true },
@@ -46,6 +46,8 @@
       this.categories = new I.CategoryRepository(db);
       this.budgets = new I.BudgetRepository(db);
       this.expenses = new I.ExpenseRepository(db);
+      this.fx = new I.FxRepository(db);
+      this._ratesSynced = false;
     }
 
     // ------------------------------------------------------------ Настройки
@@ -57,8 +59,91 @@
         sym: currency.sym,
         startDay: parseInt(s.start_day || '1', 10),
         remindDays: parseInt(s.remind_days || '2', 10),
+        savingsInitial: parseInt(s.savings_initial || '0', 10),
         onboarded: s.onboarded === '1'
       };
+    }
+
+    /** Подписи текущего периода с учётом дня начала месяца */
+    periodTitle(p, now) { return PeriodLabel.title(p, this.settings().startDay, now); }
+    periodIn(p, now) { return PeriodLabel.inPhrase(p, this.settings().startDay, now); }
+    periodFor(p, now) { return PeriodLabel.forPhrase(p, this.settings().startDay, now); }
+    periodShort(p) { return PeriodLabel.short(p, this.settings().startDay); }
+
+    // ---------------------------------------------------------- Отложенные
+    /** Категория «Отложенные» есть у всех: у старых баз без неё — создаём */
+    ensureSavingsCategory() {
+      if (!this.settings().onboarded || this.categories.savings()) return;
+      this.db.write(() => this.categories.create({ name: 'Отложенные', color: '#0F766E', mandatory: true, dueDay: 15, remindDays: 2, savings: true }));
+    }
+    /** Всего отложено = стартовая сумма из настроек + все взносы в «Отложенные» за всё время */
+    savings() {
+      const cat = this.categories.savings();
+      const initial = this.settings().savingsInitial;
+      const contributed = cat ? this.expenses.sumAllTime(cat.id) : 0;
+      return { cat, initial, contributed, total: initial + contributed };
+    }
+    setSavingsInitial(minor) { this.setSetting('savings_initial', Math.max(0, Math.round(minor))); }
+
+    // --------------------------------------------------------------- Курсы
+    /** Последние известные курсы из локальной базы */
+    rates() { return this.fx.all(); }
+
+    /** Курс по запросу: сначала сеть, без сети — локальная база. Свежий курс сохраняем. */
+    async freshRates() {
+      let online = false;
+      try {
+        const rows = await I.RatesClient.fetchLatest();
+        if (rows.length) { this.db.write(() => this.fx.saveMany(rows)); online = true; this._ratesSynced = true; }
+      } catch (_) { /* нет сети — берём из базы */ }
+      return { rates: this.fx.all(), online };
+    }
+
+    /** При появлении интернета обновляем курсы в базе один раз за сеанс, если они не сегодняшние */
+    async syncRatesOnce(now) {
+      if (this._ratesSynced) return false;
+      const probe = this.fx.all().get('UAH');
+      const today = Dates.dayKey(now);
+      if (probe && probe.source !== 'builtin' && (probe.fetched_at || '').slice(0, 10) === today) { this._ratesSynced = true; return false; }
+      this._ratesSynced = true; // одна попытка за сеанс, даже если неудачная — повторим при следующем «online»
+      try {
+        const rows = await I.RatesClient.fetchLatest();
+        if (!rows.length) { this._ratesSynced = false; return false; }
+        this.db.write(() => this.fx.saveMany(rows));
+        return true;
+      } catch (_) { this._ratesSynced = false; return false; }
+    }
+
+    /** План перевода в другую валюту — для экрана подтверждения */
+    conversionPlan(toCode, rates, now) {
+      const from = this.settings().currency;
+      const a = rates.get(from.code), b = rates.get(toCode);
+      if (!a || !b) return null;
+      const to = CURRENCIES.find((c) => c.code === toCode);
+      const period = this.currentPeriod(now);
+      const total = this.budgets.total(period) || 0;
+      const sources = [...new Set([a.source, b.source])];
+      return {
+        from, to, period,
+        rate: Fx.rate(a.per_eur, b.per_eur),
+        reverse: Fx.rate(b.per_eur, a.per_eur),
+        date: [a.rate_date, b.rate_date].sort()[0],
+        source: sources.map((x) => RATE_SOURCES[x]).join(' и '),
+        builtin: a.source === 'builtin' || b.source === 'builtin',
+        totalBefore: total,
+        totalAfter: Fx.convert(total, a.per_eur, b.per_eur),
+        convert: (m) => Fx.convert(m, a.per_eur, b.per_eur)
+      };
+    }
+
+    /** Меняет валюту: пересчитывает бюджет и лимиты с текущего месяца и стартовую сумму отложенного */
+    changeCurrency(plan) {
+      this.db.write(() => {
+        this.budgets.convertFrom(plan.period, plan.convert);
+        const init = parseInt(this.settingsRepo.get('savings_initial', '0'), 10);
+        if (init) this.settingsRepo.set('savings_initial', plan.convert(init));
+        this.settingsRepo.set('currency', plan.to.code);
+      });
     }
     setSetting(key, value) { this.db.write(() => this.settingsRepo.set(key, value)); }
 
@@ -242,18 +327,19 @@
     }
     copyFrom(from, to) { return this.db.write(() => this.budgets.copy(from, to)); }
 
-    completeOnboarding({ currency, total, presets }, now) {
+    completeOnboarding({ currency, total, presets, savingsInitial }, now) {
       this.db.write(() => {
         this.settingsRepo.set('currency', currency);
+        this.settingsRepo.set('savings_initial', Math.max(0, savingsInitial || 0));
         this.settingsRepo.set('start_day', this.settingsRepo.get('start_day', '1'));
         this.settingsRepo.set('remind_days', 2);
         const period = Period.ofDate(now, parseInt(this.settingsRepo.get('start_day', '1'), 10));
         this.budgets.setTotal(period, total);
-        const chosen = presets.filter((p) => p.on);
+        const chosen = presets.filter((p) => p.on || p.savings); // «Отложенные» есть у всех
         const shareSum = chosen.reduce((s, p) => s + p.share, 0) || 1;
         let allocated = 0;
         chosen.forEach((p, i) => {
-          const id = this.categories.create({ name: p.name, color: p.color, mandatory: !!p.mandatory, dueDay: p.dueDay, remindDays: 2 });
+          const id = this.categories.create({ name: p.name, color: p.color, mandatory: !!p.mandatory, dueDay: p.dueDay, remindDays: 2, savings: !!p.savings });
           // распределяем бюджет по долям, округляя до сотен, остаток — в последнюю
           let amount = i === chosen.length - 1 ? total - allocated : Math.floor(total * p.share / shareSum / 10000) * 10000;
           amount = Math.max(0, amount);
@@ -272,5 +358,5 @@
     async wipe() { await this.db.reset(); }
   }
 
-  root.App = { BudgetService, CURRENCIES, PALETTE, PRESETS, DEFAULT_CURRENCY };
+  root.App = { BudgetService, CURRENCIES, PALETTE, PRESETS, DEFAULT_CURRENCY, RATE_SOURCES };
 })(window);

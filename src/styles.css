@@ -243,7 +243,7 @@ button { cursor: pointer; }
 }
 .sheet.short { top: auto; max-height: calc(100% - var(--sheet-top)); }
 .layer.on .sheet { transform: translateY(0); }
-.sheet-body { flex: 1; overflow-y: auto; padding: 16px 20px calc(24px + var(--sab)); display: flex; flex-direction: column; gap: 14px; scrollbar-width: none; }
+.sheet-body { flex: 1; overflow-y: auto; padding: 4px 20px calc(24px + var(--sab)); display: flex; flex-direction: column; gap: 14px; scrollbar-width: none; }
 .sheet-body::-webkit-scrollbar { display: none; }
 .sheet-head { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; min-height: 36px; gap: 8px; }
 .sheet-head h1 { margin: 0; font-size: 17px; font-weight: 700; text-align: center; white-space: nowrap; }
@@ -355,3 +355,23 @@ button { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
+
+/* ---------------------------------------------------------------- Savings */
+.savings { display: flex; align-items: center; gap: 14px; width: 100%; border: 0; background: var(--card); border-radius: 22px; padding: 14px 16px; text-align: left; }
+.savings .main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.savings .k { font-size: 13px; color: var(--muted); font-weight: 500; }
+.savings .v { font-size: 24px; font-weight: 800; letter-spacing: -0.6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.savings .s { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.spinner { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--track); border-top-color: var(--accent); animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Прокручиваемые колонки: элементы не сжимаются, а уходят в прокрутку.
+   Без этого Safari ужимал карточки и кнопки, чтобы всё влезло в экран, и прокрутка пропадала. */
+.screen > *, .sheet-body > *, .page-body > *, .onb-body > * { flex-shrink: 0; }
+.screen, .sheet-body, .page, .onb-body { overscroll-behavior-y: contain; }
+
+/* Ручка листа: за неё можно тянуть вниз, чтобы закрыть */
+.grabber-zone { flex-shrink: 0; height: 22px; display: flex; align-items: center; justify-content: center; touch-action: none; cursor: grab; }
+.grabber { width: 40px; height: 5px; background: #C9CBC6; border-radius: 3px; }
+.sheet-head { touch-action: none; }

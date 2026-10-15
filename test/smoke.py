@@ -99,7 +99,9 @@ def run(viewport, prefix):
         pg.wait_for_timeout(450)
         shot("8-settings")
         pg.click('[data-action="set-currency"][data-code="PLN"]')
-        pg.wait_for_timeout(200)
+        pg.wait_for_selector('[data-action="convert-ok"]', timeout=20000)
+        pg.click('[data-action="convert-ok"]')
+        pg.wait_for_timeout(450)
         pg.click('[data-action="close-settings"]')
         pg.wait_for_timeout(450)
 

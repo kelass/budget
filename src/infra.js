@@ -91,8 +91,35 @@
     );
     CREATE INDEX ix_expenses_spent_at     ON expenses(spent_at);
     CREATE INDEX ix_expenses_cat_spent_at ON expenses(category_id, spent_at);
-    `
+    `,
+    // v2 — копилка «Отложенные», курсы валют, убраны рубли
+    (db) => {
+      db.exec(`
+        ALTER TABLE categories ADD COLUMN is_savings INTEGER NOT NULL DEFAULT 0 CHECK (is_savings IN (0, 1));
+
+        -- Курс: сколько единиц валюты за 1 евро. Хранится последний известный.
+        CREATE TABLE fx_rates (
+          code       TEXT PRIMARY KEY,
+          per_eur    REAL NOT NULL CHECK (per_eur > 0),
+          source     TEXT NOT NULL,          -- 'ecb' | 'erapi' | 'builtin'
+          rate_date  TEXT NOT NULL,          -- дата курса 'YYYY-MM-DD'
+          fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
+        ) WITHOUT ROWID;
+      `);
+      const st = db.prepare('INSERT INTO fx_rates(code, per_eur, source, rate_date) VALUES (?, ?, ?, ?)');
+      BUILTIN_RATES.forEach(([code, rate]) => st.run([code, rate, 'builtin', BUILTIN_RATES_DATE]));
+      st.free();
+      // Бывшие «Накопления» становятся «Отложенными»
+      db.exec(`UPDATE categories SET is_savings = 1, name = 'Отложенные'
+               WHERE id = (SELECT id FROM categories WHERE archived = 0 AND name = 'Накопления' ORDER BY id LIMIT 1)`);
+      // Рубли больше не поддерживаются — переключаем на гривну
+      db.exec(`UPDATE settings SET value = 'UAH' WHERE key = 'currency' AND value IN ('RUB', 'BYN')`);
+    }
   ];
+
+  /** Встроенные курсы на случай, если приложение ни разу не выходило в сеть */
+  const BUILTIN_RATES_DATE = '2026-10-15';
+  const BUILTIN_RATES = [['EUR', 1], ['USD', 1.1195], ['PLN', 4.3658], ['UAH', 50.4169], ['KZT', 504.387], ['GEL', 2.9093]];
 
   // ------------------------------------------------------ Обёртка над SQLite ---
   class SqliteDatabase {
@@ -114,7 +141,12 @@
       const v = this.get('PRAGMA user_version').user_version;
       for (let i = v; i < MIGRATIONS.length; i++) {
         this.db.exec('BEGIN');
-        try { this.db.exec(MIGRATIONS[i]); this.db.exec('PRAGMA user_version = ' + (i + 1)); this.db.exec('COMMIT'); }
+        try {
+          const m = MIGRATIONS[i];
+          if (typeof m === 'function') m(this.db); else this.db.exec(m);
+          this.db.exec('PRAGMA user_version = ' + (i + 1));
+          this.db.exec('COMMIT');
+        }
         catch (e) { this.db.exec('ROLLBACK'); throw e; }
       }
       if (v < MIGRATIONS.length) this.persistSoon();
@@ -191,14 +223,15 @@
 
   class CategoryRepository {
     constructor(db) { this.db = db; }
-    list() { return this.db.all('SELECT * FROM categories WHERE archived = 0 ORDER BY is_mandatory DESC, sort, id').map(mapCategory); }
+    list() { return this.db.all('SELECT * FROM categories WHERE archived = 0 ORDER BY is_mandatory DESC, is_savings, sort, id').map(mapCategory); }
+    savings() { const r = this.db.get('SELECT * FROM categories WHERE is_savings = 1 AND archived = 0 ORDER BY id LIMIT 1'); return r ? mapCategory(r) : null; }
     byId(id) { const r = this.db.get('SELECT * FROM categories WHERE id = ?', [id]); return r ? mapCategory(r) : null; }
     /** Включая архивные — нужны для истории старых записей */
     allById() { const m = new Map(); this.db.all('SELECT * FROM categories').forEach((r) => m.set(r.id, mapCategory(r))); return m; }
     create(c) {
       const sort = (this.db.value('SELECT COALESCE(MAX(sort), 0) + 1 FROM categories') || 1);
-      this.db.run('INSERT INTO categories(name, color, sort, is_mandatory, due_day, remind_days) VALUES (?, ?, ?, ?, ?, ?)',
-        [c.name, c.color, sort, c.mandatory ? 1 : 0, c.mandatory ? c.dueDay : null, c.remindDays ?? 2]);
+      this.db.run('INSERT INTO categories(name, color, sort, is_mandatory, due_day, remind_days, is_savings) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [c.name, c.color, sort, c.mandatory ? 1 : 0, c.mandatory ? c.dueDay : null, c.remindDays ?? 2, c.savings ? 1 : 0]);
       return this.db.lastId();
     }
     update(id, c) {
@@ -208,6 +241,7 @@
     hasExpenses(id) { return !!this.db.value('SELECT 1 FROM expenses WHERE category_id = ? LIMIT 1', [id]); }
     /** Категорию с записями прячем в архив, чтобы история не сломалась; пустую — удаляем. */
     remove(id) {
+      if (this.db.value('SELECT is_savings FROM categories WHERE id = ?', [id])) throw new Error('Категорию «Отложенные» удалить нельзя');
       if (this.hasExpenses(id)) this.db.run('UPDATE categories SET archived = 1 WHERE id = ?', [id]);
       else this.db.run('DELETE FROM categories WHERE id = ?', [id]);
     }
@@ -215,7 +249,7 @@
   function mapCategory(r) {
     return {
       id: r.id, name: r.name, color: r.color, sort: r.sort,
-      mandatory: !!r.is_mandatory, dueDay: r.due_day, remindDays: r.remind_days, archived: !!r.archived,
+      mandatory: !!r.is_mandatory, savings: !!r.is_savings, dueDay: r.due_day, remindDays: r.remind_days, archived: !!r.archived,
       letter: (r.name.trim()[0] || '?').toUpperCase()
     };
   }
@@ -235,6 +269,14 @@
     exists(period) { return !!this.db.value('SELECT 1 FROM budgets WHERE period = ?', [period]); }
     latestBefore(period) { return this.db.value('SELECT period FROM budgets WHERE period < ? ORDER BY period DESC LIMIT 1', [period]); }
     earliest() { return this.db.value('SELECT MIN(period) FROM budgets'); }
+    /** Пересчитывает бюджеты и лимиты начиная с периода fromPeriod (прошлые не трогаем — они совпадают с записями) */
+    convertFrom(fromPeriod, convert) {
+      this.db.all('SELECT period, total FROM budgets WHERE period >= ?', [fromPeriod])
+        .forEach((r) => this.db.run('UPDATE budgets SET total = ? WHERE period = ?', [convert(r.total), r.period]));
+      this.db.all('SELECT period, category_id, amount FROM category_limits WHERE period >= ?', [fromPeriod])
+        .forEach((r) => this.db.run('UPDATE category_limits SET amount = ? WHERE period = ? AND category_id = ?', [convert(r.amount), r.period, r.category_id]));
+    }
+
     /** Копирует общий бюджет и лимиты из одного периода в другой */
     copy(from, to) {
       const total = this.total(from);
@@ -278,15 +320,68 @@
         .forEach((r) => m.set(r.d, r.s));
       return m;
     }
+    sumAllTime(categoryId) { return this.db.value('SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE category_id = ?', [categoryId]); }
     lastUsedCategory() { return this.db.value('SELECT category_id FROM expenses ORDER BY created_at DESC, id DESC LIMIT 1'); }
     earliestDay() { return this.db.value('SELECT MIN(spent_at) FROM expenses'); }
     count() { return this.db.value('SELECT COUNT(*) FROM expenses'); }
   }
 
+  class FxRepository {
+    constructor(db) { this.db = db; }
+    all() { const m = new Map(); this.db.all('SELECT code, per_eur, source, rate_date, fetched_at FROM fx_rates').forEach((r) => m.set(r.code, r)); return m; }
+    saveMany(rows) {
+      rows.forEach((r) => this.db.run(
+        `INSERT INTO fx_rates(code, per_eur, source, rate_date, fetched_at) VALUES (?, ?, ?, ?, datetime('now'))
+         ON CONFLICT(code) DO UPDATE SET per_eur = excluded.per_eur, source = excluded.source, rate_date = excluded.rate_date, fetched_at = excluded.fetched_at`,
+        [r.code, r.perEur, r.source, r.date]));
+    }
+  }
+
+  /**
+   * Курсы из сети. ЕЦБ (через api.frankfurter.dev — зеркало официальных курсов ЕЦБ)
+   * даёт USD и PLN. Гривны, тенге и лари у ЕЦБ нет — их берём у ExchangeRate-API.
+   */
+  const RatesClient = {
+    ECB_CODES: ['USD', 'PLN'],
+    OTHER_CODES: ['UAH', 'KZT', 'GEL'],
+    async _json(url, ms) {
+      const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const t = setTimeout(() => ctl && ctl.abort(), ms);
+      try {
+        const res = await fetch(url, { cache: 'no-store', signal: ctl && ctl.signal });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return await res.json();
+      } finally { clearTimeout(t); }
+    },
+    /** @returns {Promise<Array<{code, perEur, source, date}>>} пустой массив, если сети нет */
+    async fetchLatest(timeoutMs = 6000) {
+      const [ecb, other] = await Promise.allSettled([
+        this._json('https://api.frankfurter.dev/v1/latest?base=EUR&symbols=' + this.ECB_CODES.join(','), timeoutMs),
+        this._json('https://open.er-api.com/v6/latest/EUR', timeoutMs)
+      ]);
+      const out = new Map();
+      if (other.status === 'fulfilled' && other.value && other.value.rates) {
+        const date = new Date((other.value.time_last_update_unix || Date.now() / 1000) * 1000).toISOString().slice(0, 10);
+        [...this.OTHER_CODES, ...this.ECB_CODES].forEach((c) => {
+          const v = other.value.rates[c];
+          if (v > 0) out.set(c, { code: c, perEur: v, source: 'erapi', date });
+        });
+      }
+      if (ecb.status === 'fulfilled' && ecb.value && ecb.value.rates) {
+        this.ECB_CODES.forEach((c) => { const v = ecb.value.rates[c]; if (v > 0) out.set(c, { code: c, perEur: v, source: 'ecb', date: ecb.value.date }); });
+      }
+      if (out.size) {
+        const date = [...out.values()][0].date;
+        out.set('EUR', { code: 'EUR', perEur: 1, source: out.has('USD') && out.get('USD').source === 'ecb' ? 'ecb' : 'erapi', date });
+      }
+      return [...out.values()];
+    }
+  };
+
   // ---------------------------------------------------------- Демо-данные ---
   const DEMO_CATEGORIES = [
     { name: 'Жильё', color: '#2B3A55', limit: 45000, mandatory: true, dueDay: 5 },
-    { name: 'Накопления', color: '#0F766E', limit: 7000, mandatory: true, dueDay: 15 },
+    { name: 'Отложенные', color: '#0F766E', limit: 7000, mandatory: true, dueDay: 15, savings: true },
     { name: 'Продукты', color: '#23805E', limit: 25000, base: 27300, ticket: 1400, notes: ['Магазин у дома', 'Продукты на неделю', 'Рынок', 'Супермаркет', 'Пекарня', 'Фрукты и овощи'] },
     { name: 'Кафе и рестораны', color: '#B84A17', limit: 12000, base: 11800, ticket: 900, notes: ['Кофе с собой', 'Ужин с друзьями', 'Обед в кафе', 'Бизнес-ланч', 'Доставка пиццы', 'Завтрак в кафе'] },
     { name: 'Развлечения', color: '#6A4FCC', limit: 12000, base: 9100, ticket: 1500, notes: ['Кино, 2 билета', 'Концерт', 'Боулинг', 'Книга', 'Настольная игра', 'Музей'] },
@@ -317,8 +412,9 @@
     repos.settings.set('start_day', startDay);
     repos.settings.set('remind_days', 2);
     repos.settings.set('onboarded', 1);
+    repos.settings.set('savings_initial', 150000 * 100);
 
-    const ids = DEMO_CATEGORIES.map((c) => repos.categories.create({ name: c.name, color: c.color, mandatory: !!c.mandatory, dueDay: c.dueDay, remindDays: 2 }));
+    const ids = DEMO_CATEGORIES.map((c) => repos.categories.create({ name: c.name, color: c.color, mandatory: !!c.mandatory, dueDay: c.dueDay, remindDays: 2, savings: !!c.savings }));
 
     const add = (catIdx, amountUnits, date, note) => {
       const spentAt = Dates.stamp(date);
@@ -364,5 +460,5 @@
     add(2, 4860, d(2, 19, 20), 'Продукты на неделю');
   }
 
-  root.Infra = { DeviceFileStore, SqliteDatabase, SettingsRepository, CategoryRepository, BudgetRepository, ExpenseRepository, seedDemo };
+  root.Infra = { DeviceFileStore, SqliteDatabase, SettingsRepository, CategoryRepository, BudgetRepository, ExpenseRepository, FxRepository, RatesClient, seedDemo };
 })(window);
