@@ -146,6 +146,13 @@
       day     INTEGER NOT NULL CHECK (day BETWEEN 1 AND 31),
       source  TEXT    NOT NULL DEFAULT ''
     ) WITHOUT ROWID;
+    `,
+    // v5 — валюта зачисления: исходная сумма и валюта; amount — уже в валюте бюджета
+    `
+    ALTER TABLE incomes ADD COLUMN orig_amount INTEGER;
+    ALTER TABLE incomes ADD COLUMN orig_currency TEXT;
+    ALTER TABLE income_plans ADD COLUMN orig_amount INTEGER;
+    ALTER TABLE income_plans ADD COLUMN orig_currency TEXT;
     `
   ];
 
@@ -383,11 +390,18 @@
     }
     // --- зачисления
     byId(id) { return this.db.get('SELECT * FROM incomes WHERE id = ?', [id]); }
-    add(e) { this.db.run('INSERT INTO incomes(type_id, amount, received_at, source) VALUES (?, ?, ?, ?)', [e.typeId, e.amount, e.receivedAt, e.source || '']); return this.db.lastId(); }
-    update(id, e) { this.db.run('UPDATE incomes SET type_id = ?, amount = ?, received_at = ?, source = ? WHERE id = ?', [e.typeId, e.amount, e.receivedAt, e.source || '', id]); }
+    add(e) {
+      this.db.run('INSERT INTO incomes(type_id, amount, received_at, source, orig_amount, orig_currency) VALUES (?, ?, ?, ?, ?, ?)',
+        [e.typeId, e.amount, e.receivedAt, e.source || '', e.origAmount ?? null, e.origCurrency ?? null]);
+      return this.db.lastId();
+    }
+    update(id, e) {
+      this.db.run('UPDATE incomes SET type_id = ?, amount = ?, received_at = ?, source = ?, orig_amount = ?, orig_currency = ? WHERE id = ?',
+        [e.typeId, e.amount, e.receivedAt, e.source || '', e.origAmount ?? null, e.origCurrency ?? null, id]);
+    }
     remove(id) { this.db.run('DELETE FROM incomes WHERE id = ?', [id]); }
     list(range, query) {
-      let sql = 'SELECT i.id, i.type_id, i.amount, i.received_at, i.source FROM incomes i JOIN income_types t ON t.id = i.type_id WHERE i.received_at >= ? AND i.received_at < ?';
+      let sql = 'SELECT i.id, i.type_id, i.amount, i.received_at, i.source, i.orig_amount, i.orig_currency FROM incomes i JOIN income_types t ON t.id = i.type_id WHERE i.received_at >= ? AND i.received_at < ?';
       const p = [range.startKey, range.endKey];
       if (query) { sql += " AND (i.source LIKE ? ESCAPE '\\' OR t.name LIKE ? ESCAPE '\\')"; const q = '%' + query.replace(/[\\%_]/g, (m) => '\\' + m) + '%'; p.push(q, q); }
       return this.db.all(sql + ' ORDER BY i.received_at DESC, i.id DESC', p);
@@ -396,16 +410,25 @@
     receivedTypes(range) { return new Set(this.db.all('SELECT DISTINCT type_id FROM incomes WHERE received_at >= ? AND received_at < ?', [range.startKey, range.endKey]).map((r) => r.type_id)); }
     lastSource(typeId) { return this.db.value("SELECT source FROM incomes WHERE type_id = ? AND source != '' ORDER BY received_at DESC LIMIT 1", [typeId]) || ''; }
     // --- ожидания
-    plans() { return this.db.all('SELECT type_id, amount, day, source FROM income_plans'); }
-    plan(typeId) { return this.db.get('SELECT type_id, amount, day, source FROM income_plans WHERE type_id = ?', [typeId]); }
-    setPlan(typeId, amount, day, source) {
-      this.db.run('INSERT INTO income_plans(type_id, amount, day, source) VALUES (?, ?, ?, ?) ON CONFLICT(type_id) DO UPDATE SET amount = excluded.amount, day = excluded.day, source = excluded.source', [typeId, amount, day, source || '']);
+    plans() { return this.db.all('SELECT type_id, amount, day, source, orig_amount, orig_currency FROM income_plans'); }
+    plan(typeId) { return this.db.get('SELECT type_id, amount, day, source, orig_amount, orig_currency FROM income_plans WHERE type_id = ?', [typeId]); }
+    setPlan(typeId, amount, day, source, origAmount, origCurrency) {
+      this.db.run(`INSERT INTO income_plans(type_id, amount, day, source, orig_amount, orig_currency) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(type_id) DO UPDATE SET amount = excluded.amount, day = excluded.day, source = excluded.source, orig_amount = excluded.orig_amount, orig_currency = excluded.orig_currency`,
+        [typeId, amount, day, source || '', origAmount ?? null, origCurrency ?? null]);
     }
     removePlan(typeId) { this.db.run('DELETE FROM income_plans WHERE type_id = ?', [typeId]); }
     /** Пересчёт при смене валюты (вызывается внутри общей транзакции) */
-    convertAll(factor) {
-      this.db.run('UPDATE incomes SET amount = MAX(1, CAST(ROUND(amount * ?) AS INTEGER))', [factor]);
-      this.db.run('UPDATE income_plans SET amount = MAX(1, CAST(ROUND(amount * ?) AS INTEGER))', [factor]);
+    /**
+     * Пересчёт при смене валюты бюджета (внутри общей транзакции). Если зачисление было в новой
+     * валюте бюджета, берём его точную исходную сумму; бывшие «в валюте бюджета» запоминают старую валюту.
+     */
+    convertAll(factor, newBase, oldBase) {
+      for (const t of ['incomes', 'income_plans']) {
+        if (oldBase) this.db.run(`UPDATE ${t} SET orig_amount = amount, orig_currency = ? WHERE orig_currency IS NULL`, [oldBase]);
+        this.db.run(`UPDATE ${t} SET amount = MAX(1, CAST(ROUND(amount * ?) AS INTEGER))`, [factor]);
+        if (newBase) this.db.run(`UPDATE ${t} SET amount = orig_amount, orig_amount = NULL, orig_currency = NULL WHERE orig_currency = ?`, [newBase]);
+      }
     }
   }
   /** Короткая метка для значка типа: «ЗП», «АВ», «КБ» */

@@ -9,12 +9,12 @@
   const I = root.Infra;
 
   const CURRENCIES = [
-    { code: 'UAH', sym: '₴', name: 'Украинская гривна', inForm: 'гривны' },
-    { code: 'USD', sym: '$', name: 'Доллар США', inForm: 'доллары' },
-    { code: 'EUR', sym: '€', name: 'Евро', inForm: 'евро' },
-    { code: 'PLN', sym: 'zł', name: 'Польский злотый', inForm: 'злотые' },
-    { code: 'KZT', sym: '₸', name: 'Казахстанский тенге', inForm: 'тенге' },
-    { code: 'GEL', sym: '₾', name: 'Грузинский лари', inForm: 'лари' }
+    { code: 'UAH', sym: '₴', name: 'Украинская гривна', short: 'Гривна', inForm: 'гривны' },
+    { code: 'USD', sym: '$', name: 'Доллар США', short: 'Доллар', inForm: 'доллары' },
+    { code: 'EUR', sym: '€', name: 'Евро', short: 'Евро', inForm: 'евро' },
+    { code: 'PLN', sym: 'zł', name: 'Польский злотый', short: 'Злотый', inForm: 'злотые' },
+    { code: 'KZT', sym: '₸', name: 'Казахстанский тенге', short: 'Тенге', inForm: 'тенге' },
+    { code: 'GEL', sym: '₾', name: 'Грузинский лари', short: 'Лари', inForm: 'лари' }
   ];
 
   const RATE_SOURCES = { ecb: 'ЕЦБ', erapi: 'ExchangeRate-API', builtin: 'встроенный курс' };
@@ -151,7 +151,7 @@
       this.db.write(() => {
         this.budgets.convertAll(plan.convert);
         this.expenses.convertAll(plan.factor);
-        this.incomes.convertAll(plan.factor);
+        this.incomes.convertAll(plan.factor, plan.to.code, plan.from.code);
         const init = parseInt(this.settingsRepo.get('savings_initial', '0'), 10);
         if (init) this.settingsRepo.set('savings_initial', plan.convertExact(init));
         this.settingsRepo.set('currency', plan.to.code);
@@ -266,12 +266,42 @@
      * Сохраняет зачисление. repeat=true — «ждать каждый месяц»: сумма и число берутся из этого
      * зачисления. repeat=false — ожидание для этого типа снимается.
      */
+    /**
+     * Пересчёт суммы зачисления из его валюты в валюту бюджета по последнему сохранённому курсу.
+     * @returns {{amount, rate, date, source, same}} rate — сколько единиц валюты бюджета за 1 единицу исходной
+     */
+    incomeConversion(origMinor, code) {
+      const base = this.settings().currency.code;
+      if (!code || code === base) return { amount: origMinor, same: true, rate: 1 };
+      const rates = this.fx.all();
+      const a = rates.get(code), b = rates.get(base);
+      if (!a || !b) throw new Error('Нет курса для этой валюты');
+      return {
+        amount: Fx.convertExact(origMinor, a.per_eur, b.per_eur),
+        rate: Fx.rate(a.per_eur, b.per_eur),
+        date: [a.rate_date, b.rate_date].sort()[0],
+        source: [...new Set([a.source, b.source])].map((x) => RATE_SOURCES[x]).join(' и '),
+        same: false
+      };
+    }
+
+    /**
+     * Сохраняет зачисление. e.origAmount — сумма в валюте зачисления e.origCurrency; в базу пишем
+     * и её, и пересчитанную в валюту бюджета. При редактировании без изменения суммы и валюты
+     * пересчёт не делаем, чтобы запись не «плыла» от нового курса.
+     */
     saveIncome(e) {
-      if (!(e.amount > 0)) throw new Error('Введите сумму больше нуля');
+      if (!(e.origAmount > 0)) throw new Error('Введите сумму больше нуля');
       if (!e.typeId) throw new Error('Выберите, что пришло');
+      const base = this.settings().currency.code;
+      const code = e.origCurrency || base;
+      let amount;
+      if (e.id && e.keepAmount != null) amount = e.keepAmount;
+      else amount = this.incomeConversion(e.origAmount, code).amount;
+      const row = { ...e, amount, origAmount: code === base ? null : e.origAmount, origCurrency: code === base ? null : code };
       return this.db.write(() => {
-        const id = e.id ? (this.incomes.update(e.id, e), e.id) : this.incomes.add(e);
-        if (e.repeat) this.incomes.setPlan(e.typeId, e.amount, parseInt(e.receivedAt.slice(8, 10), 10), e.source);
+        const id = e.id ? (this.incomes.update(e.id, row), e.id) : this.incomes.add(row);
+        if (e.repeat) this.incomes.setPlan(e.typeId, amount, parseInt(e.receivedAt.slice(8, 10), 10), e.source, row.origAmount, row.origCurrency);
         else this.incomes.removePlan(e.typeId);
         return id;
       });
@@ -289,7 +319,7 @@
         .map((pl) => {
           const due = BudgetMath.dueDate(period, st.startDay, pl.day);
           const late = Dates.diffDays(due, now);
-          return { type: types.get(pl.type_id), amount: pl.amount, source: pl.source, due, late, remind: late >= 2 && now < r.end };
+          return { type: types.get(pl.type_id), amount: pl.amount, origAmount: pl.orig_amount, origCurrency: pl.orig_currency, source: pl.source, due, late, remind: late >= 2 && now < r.end };
         })
         .sort((a, b) => a.due - b.due);
     }

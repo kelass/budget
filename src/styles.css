@@ -440,3 +440,61 @@ button { cursor: pointer; }
 .dot { width: 22px; height: 22px; border: 0; background: transparent; padding: 0; display: flex; align-items: center; justify-content: center; }
 .dot::before { content: ''; width: 7px; height: 7px; border-radius: 4px; background: #C9CBC6; transition: background 0.2s, width 0.2s; }
 .dot[aria-selected="true"]::before { background: var(--ink); width: 16px; }
+
+/* Окна «Расход» и «Зачисление»: всё на одном экране без прокрутки, клавиатура прижата к низу */
+.sheet-body.fit { gap: 12px; padding-bottom: calc(14px + var(--sab)); }
+.sheet-body.fit .keys { margin-top: auto; grid-auto-rows: clamp(38px, 5.4vh, 46px); }
+.sheet-body.fit .key { height: auto; }
+.sheet-body.fit .btn-primary { height: clamp(48px, 6.4vh, 54px); }
+.amount-block { position: relative; height: 76px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.amount-block .amount { height: 52px; min-height: 0; padding: 0; align-items: center; }
+.amount-block .amount .n { font-size: 52px; }
+.amount-block .amount .n.sm { font-size: 42px; }
+.amount-block .amount .n.xs { font-size: 34px; }
+.amount-block .amount .c { font-size: 30px; }
+.amount-block .amount .caret { height: 42px; }
+.amount-cap { font-size: 13px; line-height: 18px; color: var(--muted); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.amount-cap.good { color: var(--accent-ink); font-weight: 600; }
+.amount-cap.bad { color: var(--warn); font-weight: 600; }
+.cur-pill { height: 36px; border: 0; border-radius: 18px; background: var(--dark); color: #FFFFFF; padding: 0 10px 0 12px; display: flex; align-items: center; gap: 4px; font-size: 16px; font-weight: 700; margin-left: 4px; align-self: center; }
+.cur-pill span { font-size: 12px; font-weight: 600; color: var(--dark-text); }
+.cur-menu { position: absolute; top: 50px; right: 0; z-index: 5; width: 220px; background: var(--card); border-radius: 16px; box-shadow: 0 12px 32px rgba(21, 23, 28, 0.22); padding: 6px; }
+.cur-menu button { width: 100%; height: 40px; border: 0; border-radius: 10px; background: transparent; display: flex; align-items: center; gap: 10px; padding: 0 10px; font-size: 14px; text-align: left; }
+.cur-menu button[aria-selected="true"] { background: var(--accent-soft); }
+.cur-menu b { width: 22px; }
+.cur-menu span { flex: 1; }
+.cur-menu i { font-style: normal; font-size: 11px; color: var(--muted); font-weight: 600; }
+.sheet-body.fit .cats { height: 80px; flex-shrink: 0; align-items: flex-start; }
+.cat-pick .ic.inc { font-size: 15px; font-weight: 800; }
+.cat-pick .ic.add { border: 1.5px dashed #B8BAB4; background: transparent !important; color: var(--ink-2); }
+.cat-pick .ic.del { background: var(--warn); color: #FFFFFF; font-size: 24px; }
+.cats .new-type { padding: 8px 0; }
+.icon-btn.sm { width: 36px; height: 36px; font-size: 20px; flex-shrink: 0; }
+.info-slot { height: 116px; flex-shrink: 0; display: flex; flex-direction: column; }
+.info-slot > .info { flex: 1; overflow: hidden; }
+.info-slot:empty { display: none; }
+.inc-info { height: 116px; flex-shrink: 0; gap: 8px; padding: 12px 14px; }
+.inc-info .rep { display: flex; align-items: center; gap: 10px; }
+.inc-info .rep svg { flex-shrink: 0; }
+.inc-info .rep-t { flex: 1; font-size: 14px; line-height: 1.3; }
+.inc-info .sep { height: 1px; background: var(--line); }
+.inc-info .pl-top { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--ink-2); }
+.inc-info .pl-bar { height: 6px; background: var(--track); border-radius: 3px; display: flex; overflow: hidden; }
+.del-btn { height: 36px; min-width: 36px; border: 0; border-radius: 18px; background: transparent; color: var(--muted); display: flex; align-items: center; justify-content: center; padding: 0 6px; font-size: 14px; font-weight: 700; }
+.del-btn.confirm { background: var(--warn); color: #FFFFFF; padding: 0 12px; }
+
+/* Низкие экраны (iPhone SE, mini): ужимаем блоки, чтобы окно записи помещалось без прокрутки */
+@media (max-height: 740px) {
+  .sheet-body.fit { gap: 8px; }
+  .sheet-body.fit .keys { gap: 5px; grid-auto-rows: clamp(34px, 5.2vh, 42px); }
+  .sheet-body.fit .btn-primary { height: 46px; }
+  .amount-block { height: 66px; gap: 2px; }
+  .amount-block .amount { height: 46px; }
+  .amount-block .amount .n { font-size: 44px; }
+  .sheet-body.fit .cats { height: 74px; }
+  .info-slot, .inc-info { height: 104px; }
+  .inc-info { padding: 10px 14px; gap: 6px; }
+  .sheet-body.fit .field-btn { height: 40px; }
+}
+
+.type-tile { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }

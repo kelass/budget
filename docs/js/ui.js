@@ -32,7 +32,10 @@
     shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>',
     phone: '<rect x="6" y="2" width="12" height="20" rx="3"></rect><path d="M11 18h2"></path>',
     share: '<path d="M12 3v13M7 8l5-5 5 5"></path><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"></path>',
-    upload: '<path d="M12 16V4M7 9l5-5 5 5"></path><path d="M4 20h16"></path>'
+    upload: '<path d="M12 16V4M7 9l5-5 5 5"></path><path d="M4 20h16"></path>',
+    trash: '<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"></path>',
+    building: '<path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"></path>',
+    repeat: '<path d="M17 2l4 4-4 4"></path><path d="M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4"></path><path d="M21 13v1a4 4 0 0 1-4 4H3"></path>'
   };
   const checkCircle = (size = 28, color = 'var(--accent)', label = 'Выполнено') =>
     `<svg width="${size}" height="${size}" viewBox="0 0 28 28" role="img" aria-label="${label}" style="flex-shrink:0"><circle cx="14" cy="14" r="14" fill="${color}"></circle><path d="M8 14.5l4 4 8-9" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
@@ -45,6 +48,12 @@
   const incAva = (type, expected) => expected
     ? `<span class="ava inc-ava exp">${esc(type ? type.tag : '+')}</span>`
     : `<span class="ava inc-ava" style="background:${incColor(type)}">${esc(type ? type.tag : '+')}</span>`;
+  /** «2 000 ₴» — исходная сумма зачисления, если оно было не в валюте бюджета */
+  const origLabel = (amount, code) => {
+    if (!code || code === st.currency.code || amount == null) return '';
+    const c = CURRENCIES.find((x) => x.code === code);
+    return Money.format(amount, c ? c.sym : code, { noFraction: Math.abs(amount) >= 100000 });
+  };
   const striped = (c) => `repeating-linear-gradient(135deg, ${c} 0 4px, ${c}66 4px 8px)`;
 
   // --------------------------------------------------------------- State ---
@@ -223,7 +232,7 @@
       <div class="day-head"><h2>${esc(Labels.dayTitle(d.key, n))}</h2><span>${tot}</span></div>
       <div class="card list">${d.items.map((t) => t.kind === 'income'
         ? `<button class="row tap" data-action="edit-inc" data-id="${t.id}">${incAva(t.type)}
-        <span class="main" style="gap:2px"><span class="title">${esc(t.type ? t.type.name : 'Зачисление')}</span><span class="sub">${esc(t.source ? t.source + ' · ' : '')}${Dates.time(t.at)}</span></span>
+        <span class="main" style="gap:2px"><span class="title">${esc(t.type ? t.type.name : 'Зачисление')}</span><span class="sub">${[origLabel(t.orig_amount, t.orig_currency), t.source, Dates.time(t.at)].filter(Boolean).map(esc).join(' · ')}</span></span>
         <span class="amt good">+${fmt(t.amount)}</span></button>`
         : `<button class="row tap" data-action="edit-exp" data-id="${t.id}">${ava(t.cat)}
         <span class="main" style="gap:2px"><span class="title">${esc(t.note || t.cat.name)}</span><span class="sub">${esc(t.cat.name)} · ${Dates.time(t.at)}</span></span>
@@ -281,10 +290,10 @@
       : `Столбец появится ${Labels.longDate(vm.periodEnd)} — или сразу, как только зачисления превысят план.`;
 
     const expected = vm.expected.map((e) => `<button class="row tap exp-row" data-action="add-inc" data-type="${e.type.id}">${incAva(e.type, true)}
-      <span class="main" style="gap:2px"><span class="title">${esc(e.type.name)}</span><span class="sub${e.remind ? ' bad' : ''}">${e.late > 0 ? 'ожидалось ' : 'ожидается '}${Labels.shortDate(e.due)}${e.remind ? ' · не отмечено' : ''}</span></span>
+      <span class="main" style="gap:2px"><span class="title">${esc(e.type.name)}</span><span class="sub${e.remind ? ' bad' : ''}">${e.late > 0 ? 'ожидалось ' : 'ожидается '}${Labels.shortDate(e.due)}${e.origCurrency ? ' · ' + esc(origLabel(e.origAmount, e.origCurrency)) : ''}${e.remind ? ' · не отмечено' : ''}</span></span>
       <span class="amt" style="color:var(--muted);font-weight:600">≈ ${fmtR(e.amount)}</span></button>`).join('');
     const got = vm.items.map((t) => `<button class="row tap" data-action="edit-inc" data-id="${t.id}">${incAva(t.type)}
-      <span class="main" style="gap:2px"><span class="title">${esc(t.type ? t.type.name : 'Зачисление')}</span><span class="sub">${esc(t.source ? t.source + ' · ' : '')}${Labels.shortDate(Dates.parseDay(t.received_at))}</span></span>
+      <span class="main" style="gap:2px"><span class="title">${esc(t.type ? t.type.name : 'Зачисление')}</span><span class="sub">${[origLabel(t.orig_amount, t.orig_currency), t.source, Labels.shortDate(Dates.parseDay(t.received_at))].filter(Boolean).map(esc).join(' · ')}</span></span>
       <span class="amt good" style="font-weight:800">+${fmt(t.amount)}</span></button>`).join('');
 
     return `<div class="head"><h1 class="h1">Аналитика</h1><button class="pill-btn" style="height:40px;border-radius:20px;color:var(--accent-ink);font-weight:700" data-action="add-inc">${svg(P.plus, 16, 2.8)}Зачисление</button></div>
@@ -528,6 +537,7 @@
     if (!body || !S.sheet) return;
     const chips = body.querySelector('.cats');
     const sl = chips ? chips.scrollLeft : 0;
+    body.classList.toggle('fit', S.sheet.type === 'expense' || S.sheet.type === 'income');
     body.innerHTML = SHEETS[S.sheet.type]();
     const chips2 = body.querySelector('.cats');
     if (chips2) chips2.scrollLeft = sl;
@@ -537,17 +547,30 @@
   }
 
   /** Заголовок окна новой записи: переключатель «Расход / Зачисление» вместо названия */
-  const kindHead = (kind) => `<div class="sheet-head"><button class="text-btn l" data-action="close-sheet">Отмена</button>
+  const kindHead = (kind) => `<div class="sheet-head"><span class="l"></span>
     <h1 class="sr">Новая запись</h1>
     <div class="seg two kind" role="tablist" aria-label="Тип записи">
       <button role="tab" aria-selected="${kind === 'expense'}" aria-pressed="${kind === 'expense'}" data-action="rec-kind" data-k="expense">Расход</button>
       <button role="tab" aria-selected="${kind === 'income'}" aria-pressed="${kind === 'income'}" data-action="rec-kind" data-k="income" class="inc-tab">Зачисление</button></div>
     <span class="r"></span></div>`;
+  /** Заголовок окна редактирования записи: без «Отмены» (закрытие свайпом), справа — удалить */
+  const editHead = (title, delAction, confirm) => `<div class="sheet-head"><span class="l"></span><h1>${esc(title)}</h1>
+    <span class="r"><button class="del-btn${confirm ? ' confirm' : ''}" data-action="${delAction}" aria-label="${confirm ? 'Подтвердить удаление' : 'Удалить'}">${confirm ? 'Удалить?' : svg(P.trash, 20, 2)}</button></span></div>`;
   const sheetHead = (title, right = '') => `<div class="sheet-head"><button class="text-btn l" data-action="close-sheet">Отмена</button><h1>${esc(title)}</h1><span class="r">${right}</span></div>`;
 
   function keypad() {
     return `<div class="keys">${['1', '2', '3', '4', '5', '6', '7', '8', '9', ',', '0', 'del'].map((k) =>
       `<button class="key${k === ',' || k === 'del' ? ' alt' : ''}" data-action="key" data-k="${k}" aria-label="${k === 'del' ? 'Стереть' : k === ',' ? 'Запятая' : k}">${k === 'del' ? svg(P.del, 24, 1.8) : k}</button>`).join('')}</div>`;
+  }
+  /** Блок суммы фиксированной высоты для окон записи: сумма + знак или кнопка валюты + подпись */
+  function amountBlock(str, { plus, curPill, caption, captionCls, menu } = {}) {
+    const empty = !str;
+    const [w, f] = (str || '0').split(',');
+    const shown = String(parseInt(w || '0', 10)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + (f !== undefined ? ',' + f : '');
+    const size = shown.length > 10 ? ' xs' : shown.length > 7 ? ' sm' : '';
+    return `<div class="amount-block">
+      <div class="amount" aria-live="polite">${plus ? '<span class="c plus">+</span>' : ''}<span class="n${size}${empty ? ' zero' : ''}">${shown}</span>${curPill || `<span class="c">${esc(st.sym)}</span>`}<span class="caret" aria-hidden="true"></span></div>
+      <span class="amount-cap${captionCls ? ' ' + captionCls : ''}">${caption || ''}</span>${menu || ''}</div>`;
   }
   function amountDisplay(str, plus) {
     const empty = !str;
@@ -602,10 +625,10 @@
         <span class="ic" style="background:${on ? c.color : 'var(--card)'};color:${on ? '#FFFFFF' : c.color};box-shadow:${on ? `0 0 0 3px var(--bg), 0 0 0 5px ${c.color}` : 'none'}">${esc(c.letter)}${c.mandatory ? '<span class="must" aria-label="обязательный">!</span>' : ''}</span>
         <span class="nm">${esc(shortName(c.name))}</span></button>`;
     }).join('');
-    return `${s.id ? sheetHead('Запись') : kindHead('expense')}
-      ${amountDisplay(s.amount)}
+    return `${s.id ? editHead('Запись', 'del-exp', s.confirmDel) : kindHead('expense')}
+      ${amountBlock(s.amount, { caption: 'в валюте бюджета' })}
       <div class="cats" role="group" aria-label="Категория">${chips}</div>
-      ${expenseInfo(s, amount)}
+      <div class="info-slot">${expenseInfo(s, amount)}</div>
       <div class="fields">
         <label class="field-btn" for="exp-date">${svg(P.cal, 18, 2, 'var(--muted)')}<span>${dateLabel}</span>
           <input id="exp-date" class="overlay-input" type="date" value="${s.date}" max="${Dates.dayKey(new Date(n.getFullYear() + 1, n.getMonth(), n.getDate()))}" aria-label="Дата"></label>
@@ -613,8 +636,7 @@
           <input id="exp-note" type="text" placeholder="Заметка" maxlength="80" value="${esc(s.note)}" autocomplete="off" enterkeyhint="done"></label>
       </div>
       ${keypad()}
-      <button class="btn-primary" data-action="save-exp" ${amount > 0 && s.catId ? '' : 'disabled'}>Сохранить</button>
-      ${s.id && !s.savings ? `<button class="btn-danger${s.confirmDel ? ' confirm' : ''}" data-action="del-exp">${s.confirmDel ? 'Нажмите ещё раз, чтобы удалить' : 'Удалить запись'}</button>` : ''}`;
+      <button class="btn-primary" data-action="save-exp" ${amount > 0 && s.catId ? '' : 'disabled'}>Сохранить</button>`;
   }
 
   function expenseInfo(s, amount) {
@@ -653,75 +675,106 @@
     if (opts.id) {
       const e = svc.income(opts.id);
       if (!e) return;
-      openSheet({ type: 'income', id: e.id, amount: Money.toInput(e.amount), typeId: e.type_id, date: e.received_at.slice(0, 10), time: e.received_at.slice(11, 16), source: e.source, repeat: !!svc.incomePlan(e.type_id) });
+      const cur = e.orig_currency || st.currency.code;
+      const amt = Money.toInput(e.orig_currency ? e.orig_amount : e.amount);
+      openSheet({ type: 'income', id: e.id, amount: amt, cur, loaded: { amount: amt, cur, base: e.amount }, typeId: e.type_id, date: e.received_at.slice(0, 10), time: e.received_at.slice(11, 16), source: e.source, repeat: !!svc.incomePlan(e.type_id) });
       return;
     }
     const types = svc.incomeTypes();
     const typeId = opts.typeId || (types.find((t) => t.name === 'Зарплата') || types[0] || {}).id;
-    const sheet = { type: 'income', id: null, amount: opts.amount ? Money.toInput(opts.amount) : '', typeId, date: Dates.dayKey(n), time: null, source: '', repeat: false };
-    applyIncomeTypeDefaults(sheet, !opts.amount && opts.typeId);
+    // Валюта зачисления по умолчанию — валюта бюджета
+    const sheet = { type: 'income', id: null, amount: '', cur: st.currency.code, typeId, date: Dates.dayKey(n), time: null, source: '', repeat: false };
+    applyIncomeTypeDefaults(sheet, !!opts.typeId);
     openSheet(sheet);
   }
-  /** Для нового зачисления подставляем ожидание выбранного типа: «ждать каждый месяц», откуда, сумму */
+  /**
+   * Для нового зачисления подставляем ожидание выбранного типа: «ждать каждый месяц», откуда.
+   * withAmount — когда открыли из ожидаемого: ещё и сумму с валютой, в которой оно приходит.
+   */
   function applyIncomeTypeDefaults(s, withAmount) {
     const plan = svc.incomePlan(s.typeId);
     s.repeat = !!plan;
     s.source = (plan && plan.source) || svc.lastIncomeSource(s.typeId) || '';
-    if (withAmount && plan) s.amount = Money.toInput(plan.amount);
+    if (withAmount && plan) {
+      s.cur = plan.orig_currency || st.currency.code;
+      s.amount = Money.toInput(plan.orig_currency ? plan.orig_amount : plan.amount);
+    }
+  }
+  /** Пересчёт введённой суммы в валюту бюджета для подписи под суммой */
+  function incomeConv(s) {
+    try { return svc.incomeConversion(Money.parse(s.amount), s.cur); } catch (_) { return null; }
   }
 
   function incomeSheet() {
     const s = S.sheet, n = now();
     const types = svc.incomeTypes();
-    const amount = Money.parse(s.amount);
     const day = Dates.parseDay(s.date);
     const period = Period.ofDate(day, st.startDay);
-    const type = types.find((t) => t.id === s.typeId);
-    const chips = types.map((t) => {
-      const on = t.id === s.typeId;
-      if (s.delType === t.id) return `<button class="type-chip del" data-action="del-inc-type" data-id="${t.id}">Удалить «${esc(t.name)}»?</button>`;
-      return `<button class="type-chip" role="radio" aria-checked="${on}" data-action="pick-inc-type" data-id="${t.id}"${t.builtin ? '' : ' data-custom="1"'}>${esc(t.name)}</button>`;
-    }).join('');
-    const newType = s.newType != null
-      ? `<div class="new-type"><label class="sr" for="inc-newtype">Свой тип</label><input id="inc-newtype" class="input" type="text" maxlength="24" placeholder="Например, Аренда квартиры" value="${esc(s.newType)}" autocomplete="off" enterkeyhint="done"><button class="btn-dark-sm" data-action="add-inc-type">Добавить</button></div>`
-      : `<button class="type-chip add" data-action="new-inc-type">+ Свой тип</button>`;
-    const diff = Dates.diffDays(day, n);
-    const dateLabel = diff === 0 ? 'Сегодня, ' + Labels.shortDate(day) : diff === 1 ? 'Вчера, ' + Labels.shortDate(day) : Labels.longDate(day) + (day.getFullYear() !== n.getFullYear() ? ' ' + day.getFullYear() : '');
+    const orig = Money.parse(s.amount);
+    const cur = CURRENCIES.find((c) => c.code === s.cur) || st.currency;
+    const conv = incomeConv(s);
+    const amount = conv ? conv.amount : 0;
+    // Подпись под суммой: «в валюте бюджета» или «≈ пересчёт · курс на дату»
+    let caption, capCls = '';
+    if (!conv) { caption = 'Нет сохранённого курса — подключитесь к интернету'; capCls = 'bad'; }
+    else if (conv.same) caption = 'в валюте бюджета';
+    else {
+      const r = conv.rate;
+      const rateTxt = r >= 1 ? `1 ${cur.sym} = ${fmtRate(r)} ${st.sym}` : `1 ${st.sym} = ${fmtRate(1 / r)} ${cur.sym}`;
+      caption = `≈ ${fmt(amount)} · ${rateTxt} на ${Labels.shortDate(Dates.parseDay(conv.date))}`; capCls = 'good';
+    }
+    const pill = `<button class="cur-pill" data-action="cur-menu" aria-haspopup="listbox" aria-expanded="${!!s.menu}" aria-label="Валюта зачисления: ${esc(cur.name)}">${esc(cur.sym)} <span>${cur.code}</span>${svg(P.chev, 14, 2.6, '#FFFFFF')}</button>`;
+    const menu = s.menu ? `<div class="cur-menu" role="listbox" aria-label="Валюта зачисления">${CURRENCIES.map((c) =>
+      `<button role="option" aria-selected="${c.code === cur.code}" data-action="pick-cur" data-code="${c.code}"><b>${esc(c.sym)}</b><span>${esc(c.short || c.name)}</span><i>${c.code === st.currency.code ? 'бюджет' : c.code}</i></button>`).join('')}</div>` : '';
+
+    const tiles = s.newType != null
+      ? `<div class="new-type"><label class="sr" for="inc-newtype">Свой тип</label><input id="inc-newtype" class="input" type="text" maxlength="24" placeholder="Например, «Аренда»" value="${esc(s.newType)}" autocomplete="off" enterkeyhint="done"><button class="btn-dark-sm" data-action="add-inc-type">Добавить</button><button class="icon-btn sm" data-action="cancel-inc-type" aria-label="Отменить">×</button></div>`
+      : types.map((t) => {
+        const on = t.id === s.typeId;
+        if (s.delType === t.id) return `<button class="cat-pick" data-action="del-inc-type" data-id="${t.id}"><span class="ic del">×</span><span class="nm" style="color:var(--warn);font-weight:700">Удалить?</span></button>`;
+        return `<button class="cat-pick type-tile" role="radio" aria-checked="${on}" aria-pressed="${on}" data-action="pick-inc-type" data-id="${t.id}"${t.builtin ? '' : ' data-custom="1"'}>
+          <span class="ic inc" style="background:${on ? '#23805E' : 'var(--card)'};color:${on ? '#FFFFFF' : 'var(--accent-ink)'};box-shadow:${on ? '0 0 0 3px var(--bg), 0 0 0 5px #23805E' : 'none'}">${esc(t.tag)}</span>
+          <span class="nm">${esc(shortName(t.name))}</span></button>`;
+      }).join('') + `<button class="cat-pick" data-action="new-inc-type"><span class="ic inc add">+</span><span class="nm">Свой тип</span></button>`;
+
     const ctx = svc.incomeContext(period, s.id);
     const after = ctx.got + amount;
     const pc = (v) => (ctx.plan > 0 ? Math.min(100, v / ctx.plan * 100) : 0);
-    const planCard = ctx.plan > 0 ? `<div class="plan-card">
-        <div class="pl-top"><span class="pl-k">План ${esc(st.startDay === 1 ? MONTHS.gen[Period.parts(period).m0] : PT(period))} ${fmtR(ctx.plan)}</span><span>${num(ctx.got)} → <b>${fmtR(after)}</b></span></div>
-        <div class="pl-bar" role="img" aria-label="Было ${Math.round(pc(ctx.got))}%, станет ${Math.round(pc(after))}% плана"><div style="width:${pc(ctx.got).toFixed(1)}%;background:#23805E"></div><div style="width:${(pc(after) - pc(ctx.got)).toFixed(1)}%;background:repeating-linear-gradient(135deg, #23805E 0 4px, #9CCFB8 4px 8px)"></div></div>
-        <span class="pl-note">${after > ctx.plan ? `План будет перевыполнен на ${fmtR(after - ctx.plan)} — в аналитике сразу появится зелёный столбец.` : `Если до конца месяца придёт больше ${fmtR(ctx.plan)} — в аналитике сразу появится зелёный столбец.`}</span></div>` : '';
-    const repeatHint = s.repeat ? `«${esc(type ? type.name : '')}» около ${day.getDate()} числа — напомню, если не отмечено` : 'Разовое зачисление';
-    return `${s.id ? sheetHead('Зачисление') : kindHead('income')}
-      ${amountDisplay(s.amount, true)}
-      <div class="field"><span>Что пришло</span><div class="type-chips" role="radiogroup" aria-label="Тип зачисления">${chips}${newType}</div>
-        ${types.some((t) => !t.builtin) ? '<span style="font-size:11px;color:var(--muted)">Свой тип можно удалить долгим нажатием</span>' : ''}</div>
-      <div class="card" style="border-radius:16px;padding:0 14px">
-        <label class="opt-row" for="inc-date"><span>Дата</span><span class="val">${dateLabel}</span>
-          <input id="inc-date" class="overlay-input" type="date" value="${s.date}" aria-label="Дата зачисления"></label>
-        <label class="opt-row" for="inc-source"><span>Откуда</span>
-          <input id="inc-source" type="text" class="inline-input" placeholder="Основная работа" maxlength="60" value="${esc(s.source)}" autocomplete="off" enterkeyhint="done"></label>
-        <div class="opt-row" style="padding:10px 0">
-          <div style="flex:1;display:flex;flex-direction:column;gap:2px"><span id="rep-l">Ждать каждый месяц</span><span style="font-size:12px;color:var(--ink-2)">${repeatHint}</span></div>
-          <button class="switch" role="switch" aria-checked="${s.repeat}" aria-labelledby="rep-l" data-action="toggle-repeat"><span></span></button>
-        </div>
+    const planLabel = st.startDay === 1 ? MONTHS.gen[Period.parts(period).m0] : PT(period);
+    const planPart = ctx.plan > 0
+      ? `<div class="pl-top"><span>План ${esc(planLabel)} ${fmtR(ctx.plan)}</span><span>${num(ctx.got)} → <b class="good">${fmtR(after)}</b></span></div>
+         <div class="pl-bar" role="img" aria-label="Было ${Math.round(pc(ctx.got))}%, станет ${Math.round(pc(after))}% плана"><div style="width:${pc(ctx.got).toFixed(1)}%;background:#23805E"></div><div style="width:${(pc(after) - pc(ctx.got)).toFixed(1)}%;background:repeating-linear-gradient(135deg, #23805E 0 4px, #9CCFB8 4px 8px)"></div></div>`
+      : `<span class="pl-top">Задайте бюджет месяца — он станет планом для зачислений.</span>`;
+    const diff = Dates.diffDays(day, n);
+    const dateLabel = diff === 0 ? 'Сегодня, ' + Labels.shortDate(day) : diff === 1 ? 'Вчера, ' + Labels.shortDate(day) : Labels.shortDate(day) + (day.getFullYear() !== n.getFullYear() ? ' ' + day.getFullYear() : '');
+    return `${s.id ? editHead('Зачисление', 'del-inc', s.confirmDel) : kindHead('income')}
+      ${amountBlock(s.amount, { plus: true, curPill: pill, caption, captionCls: capCls, menu })}
+      <div class="cats" role="radiogroup" aria-label="Что пришло">${tiles}</div>
+      <div class="info inc-info">
+        <div class="rep">${svg(P.repeat, 18, 2, 'var(--muted)')}<span class="rep-t" id="rep-l">${s.repeat ? `Ждать каждый месяц, ~${day.getDate()} числа` : 'Разовое зачисление'}</span>
+          <button class="switch" role="switch" aria-checked="${s.repeat}" aria-labelledby="rep-l" data-action="toggle-repeat"><span></span></button></div>
+        <div class="sep"></div>
+        ${planPart}
       </div>
-      ${planCard}
+      <div class="fields">
+        <label class="field-btn" for="inc-date">${svg(P.cal, 18, 2, 'var(--muted)')}<span>${dateLabel}</span>
+          <input id="inc-date" class="overlay-input" type="date" value="${s.date}" aria-label="Дата зачисления"></label>
+        <label class="field-btn note" for="inc-source">${svg(P.building, 18, 2, 'var(--muted)')}<span class="sr">Откуда</span>
+          <input id="inc-source" type="text" placeholder="Откуда" maxlength="60" value="${esc(s.source)}" autocomplete="off" enterkeyhint="done"></label>
+      </div>
       ${keypad()}
-      <button class="btn-primary green" data-action="save-inc" ${amount > 0 && s.typeId ? '' : 'disabled'}>Сохранить зачисление</button>
-      ${s.id ? `<button class="btn-danger${s.confirmDel ? ' confirm' : ''}" data-action="del-inc">${s.confirmDel ? 'Нажмите ещё раз, чтобы удалить' : 'Удалить зачисление'}</button>` : ''}`;
+      <button class="btn-primary green" data-action="save-inc" ${orig > 0 && s.typeId && conv ? '' : 'disabled'}>Сохранить</button>`;
   }
 
   function saveIncome() {
     const s = S.sheet, n = now();
-    const amount = Money.parse(s.amount);
-    if (!(amount > 0) || !s.typeId) return;
+    const origAmount = Money.parse(s.amount);
+    if (!(origAmount > 0) || !s.typeId) return;
     const time = s.time || (s.date === Dates.dayKey(n) ? Dates.stamp(n).slice(11) : '12:00');
+    // При правке без изменения суммы и валюты не пересчитываем по новому курсу
+    const keepAmount = s.loaded && s.loaded.amount === s.amount && s.loaded.cur === s.cur ? s.loaded.base : null;
     try {
-      svc.saveIncome({ id: s.id, typeId: s.typeId, amount, receivedAt: s.date + ' ' + time, source: (s.source || '').trim(), repeat: s.repeat });
+      svc.saveIncome({ id: s.id, typeId: s.typeId, origAmount, origCurrency: s.cur, keepAmount, receivedAt: s.date + ' ' + time, source: (s.source || '').trim(), repeat: s.repeat });
     } catch (e) { toast(e.message, true); return; }
     closeSheet(); render(); toast(s.id ? 'Зачисление обновлено' : 'Зачисление сохранено');
   }
@@ -1088,10 +1141,20 @@
     'pick-inc-type'(t) {
       const s = S.sheet; s.delType = null;
       s.typeId = +t.dataset.id;
-      if (!s.id) applyIncomeTypeDefaults(s, !Money.parse(s.amount));
+      if (!s.id) applyIncomeTypeDefaults(s, false); // сумму и валюту при выборе типа не трогаем
       renderSheet();
     },
     'toggle-repeat'() { S.sheet.repeat = !S.sheet.repeat; renderSheet(); },
+    'cur-menu'() { S.sheet.menu = !S.sheet.menu; renderSheet(); },
+    'pick-cur'(t) {
+      const s = S.sheet; s.cur = t.dataset.code; s.menu = false; renderSheet();
+      // Один раз за окно пробуем освежить курс из сети; без сети остаётся сохранённый
+      if (s.cur !== st.currency.code && !s.ratesTried) {
+        s.ratesTried = true;
+        svc.freshRates().then(({ online }) => { if (online && S.sheet === s) renderSheet(); });
+      }
+    },
+    'cancel-inc-type'() { S.sheet.newType = null; renderSheet(); },
     'new-inc-type'() { S.sheet.newType = ''; renderSheet(); const i = document.getElementById('inc-newtype'); if (i) i.focus(); },
     'add-inc-type'() {
       try { const id = svc.addIncomeType(S.sheet.newType); S.sheet.newType = null; S.sheet.typeId = id; if (!S.sheet.id) applyIncomeTypeDefaults(S.sheet, false); renderSheet(); toast('Тип добавлен'); }
@@ -1302,6 +1365,7 @@
     el.device.addEventListener('click', (e) => {
       if (performance.now() < suppressClickUntil) { e.preventDefault(); e.stopPropagation(); return; }
       const t = e.target.closest('[data-action]');
+      if (S.sheet && S.sheet.menu && !e.target.closest('.cur-menu, .cur-pill')) { S.sheet.menu = false; renderSheet(); if (!t) return; }
       if (!t || t.disabled) return;
       const fn = A[t.dataset.action];
       if (fn) { e.preventDefault(); fn(t, e); }
@@ -1321,7 +1385,7 @@
     let lpTimer = null;
     const lpCancel = () => { clearTimeout(lpTimer); lpTimer = null; };
     el.device.addEventListener('pointerdown', (e) => {
-      const chip = e.target.closest('.type-chip[data-custom]');
+      const chip = e.target.closest('.type-tile[data-custom]');
       if (!chip || !S.sheet) return;
       lpTimer = setTimeout(() => {
         S.sheet.delType = +chip.dataset.id; suppressClickUntil = performance.now() + 450;
@@ -1330,7 +1394,7 @@
       }, 550);
     });
     ['pointerup', 'pointercancel', 'pointerleave', 'scroll'].forEach((ev) => el.device.addEventListener(ev, lpCancel, true));
-    el.device.addEventListener('contextmenu', (e) => { if (e.target.closest('.type-chip')) e.preventDefault(); });
+    el.device.addEventListener('contextmenu', (e) => { if (e.target.closest('.type-tile')) e.preventDefault(); });
     el.device.addEventListener('change', onChange);
     el.device.addEventListener('focusin', (e) => { if (e.target.dataset && e.target.dataset.lim) setTimeout(() => e.target.select(), 0); });
     el.device.addEventListener('click', (e) => {
