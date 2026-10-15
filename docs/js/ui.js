@@ -667,9 +667,10 @@
       <div class="sample" style="justify-content:center"><span style="font-size:22px;color:#FFFFFF;font-weight:800">${big}</span></div>
       <p class="cap" style="margin:0;text-align:center;font-size:13px;${s.online || pl.builtin ? '' : 'color:var(--warn)'}">${srcLine}</p>
       <div class="card" style="border-radius:18px;padding:0 16px">
-        <div class="opt-row"><span>Бюджет ${esc(PFOR(pl.period))}</span><span style="font-weight:700;white-space:nowrap">${Money.format(pl.totalBefore, pl.from.sym, { noFraction: true })} → ${Money.format(pl.totalAfter, pl.to.sym, { noFraction: true })}</span></div>
+        <div class="opt-row"><span>Бюджет</span><span style="font-weight:700;white-space:nowrap">${Money.format(pl.totalBefore, pl.from.sym, { noFraction: true })} → ${Money.format(pl.totalAfter, pl.to.sym, { noFraction: true })}</span></div>
+        <div class="opt-row"><span>Потрачено</span><span style="font-weight:700;white-space:nowrap">${Money.format(pl.spentBefore, pl.from.sym, { noFraction: true })} → ${Money.format(pl.spentAfter, pl.to.sym, { noFraction: true })}</span></div>
       </div>
-      <p class="cap" style="margin:0">Пересчитаются общий бюджет, лимиты категорий с текущего месяца и стартовая сумма отложенного. Прошлые записи и прошлые месяцы останутся без изменений.</p>
+      <p class="cap" style="margin:0">Пересчитаются все суммы по этому курсу: бюджеты и лимиты, все записи трат, в том числе за прошлые месяцы, и стартовая сумма отложенного.</p>
       <button class="btn-primary" data-action="convert-ok">Перевести в ${esc(to.code)}</button>`;
   }
 
@@ -703,7 +704,7 @@
       <div class="card" role="radiogroup" aria-label="Валюта" style="border-radius:18px;padding:0 16px">${CURRENCIES.map((c) =>
         `<button class="radio-row" role="radio" aria-checked="${c.code === st.currency.code}" data-action="set-currency" data-code="${c.code}">
           <span class="sym">${esc(c.sym)}</span><span class="nm">${esc(c.name)}</span><span class="cd">${c.code}</span><span class="ck">${svg(P.check, 18, 2.6, 'var(--link)')}</span></button>`).join('')}</div>
-      <p class="cap" style="margin:0 4px 6px">При смене валюты бюджет и лимиты с текущего месяца пересчитываются по курсу. Записи прошлых трат остаются как были. ${rateNote()}</p>
+      <p class="cap" style="margin:0 4px 6px">При смене валюты все суммы — бюджеты, лимиты, записи и отложенное — пересчитываются по курсу. ${rateNote()}</p>
       <h2 class="label-up">Отложенные</h2>
       <div class="card" style="border-radius:18px;padding:0 16px">
         <div class="opt-row"><span>Было отложено до начала учёта</span><span class="val">${fmtR(st.savingsInitial)}</span><button class="cover" data-action="edit-savings" aria-label="Изменить стартовую сумму отложенного"></button></div>
@@ -895,7 +896,7 @@
     'convert-ok'() {
       const plan = S.sheet.plan;
       if (!plan) return;
-      svc.changeCurrency(plan); closeSheet(); render(); toast('Бюджет переведён в ' + plan.to.inForm);
+      svc.changeCurrency(plan); closeSheet(); render(); toast('Все суммы переведены в ' + plan.to.inForm);
     },
     'open-backup'() { openSheet({ type: 'backup', text: '' }); },
     'ask-demo'() {

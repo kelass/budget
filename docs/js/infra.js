@@ -269,11 +269,11 @@
     exists(period) { return !!this.db.value('SELECT 1 FROM budgets WHERE period = ?', [period]); }
     latestBefore(period) { return this.db.value('SELECT period FROM budgets WHERE period < ? ORDER BY period DESC LIMIT 1', [period]); }
     earliest() { return this.db.value('SELECT MIN(period) FROM budgets'); }
-    /** Пересчитывает бюджеты и лимиты начиная с периода fromPeriod (прошлые не трогаем — они совпадают с записями) */
-    convertFrom(fromPeriod, convert) {
-      this.db.all('SELECT period, total FROM budgets WHERE period >= ?', [fromPeriod])
+    /** Пересчитывает бюджеты и лимиты всех месяцев (округление до целых единиц делает convert) */
+    convertAll(convert) {
+      this.db.all('SELECT period, total FROM budgets')
         .forEach((r) => this.db.run('UPDATE budgets SET total = ? WHERE period = ?', [convert(r.total), r.period]));
-      this.db.all('SELECT period, category_id, amount FROM category_limits WHERE period >= ?', [fromPeriod])
+      this.db.all('SELECT period, category_id, amount FROM category_limits')
         .forEach((r) => this.db.run('UPDATE category_limits SET amount = ? WHERE period = ? AND category_id = ?', [convert(r.amount), r.period, r.category_id]));
     }
 
@@ -319,6 +319,10 @@
       this.db.all('SELECT substr(spent_at, 1, 10) AS d, SUM(amount) AS s FROM expenses WHERE spent_at >= ? AND spent_at < ? GROUP BY d', [range.startKey, range.endKey])
         .forEach((r) => m.set(r.d, r.s));
       return m;
+    }
+    /** Пересчёт всех записей одним запросом: сумма × коэффициент, до копеек, не меньше 1 копейки */
+    convertAll(factor) {
+      this.db.run('UPDATE expenses SET amount = MAX(1, CAST(ROUND(amount * ?) AS INTEGER))', [factor]);
     }
     sumAllTime(categoryId) { return this.db.value('SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE category_id = ?', [categoryId]); }
     lastUsedCategory() { return this.db.value('SELECT category_id FROM expenses ORDER BY created_at DESC, id DESC LIMIT 1'); }

@@ -122,6 +122,7 @@
       const to = CURRENCIES.find((c) => c.code === toCode);
       const period = this.currentPeriod(now);
       const total = this.budgets.total(period) || 0;
+      const spent = this.expenses.sum(this.range(period));
       const sources = [...new Set([a.source, b.source])];
       return {
         from, to, period,
@@ -132,16 +133,25 @@
         builtin: a.source === 'builtin' || b.source === 'builtin',
         totalBefore: total,
         totalAfter: Fx.convert(total, a.per_eur, b.per_eur),
-        convert: (m) => Fx.convert(m, a.per_eur, b.per_eur)
+        spentBefore: spent,
+        spentAfter: Fx.convertExact(spent, a.per_eur, b.per_eur),
+        factor: b.per_eur / a.per_eur,
+        convert: (m) => Fx.convert(m, a.per_eur, b.per_eur),
+        convertExact: (m) => Fx.convertExact(m, a.per_eur, b.per_eur)
       };
     }
 
-    /** Меняет валюту: пересчитывает бюджет и лимиты с текущего месяца и стартовую сумму отложенного */
+    /**
+     * Меняет валюту и пересчитывает по одному курсу все суммы: бюджеты и лимиты всех месяцев,
+     * все записи трат и стартовую сумму отложенного. Так остаток, аналитика и копилка
+     * всегда в одной валюте. Всё в одной транзакции: или пересчиталось всё, или ничего.
+     */
     changeCurrency(plan) {
       this.db.write(() => {
-        this.budgets.convertFrom(plan.period, plan.convert);
+        this.budgets.convertAll(plan.convert);
+        this.expenses.convertAll(plan.factor);
         const init = parseInt(this.settingsRepo.get('savings_initial', '0'), 10);
-        if (init) this.settingsRepo.set('savings_initial', plan.convert(init));
+        if (init) this.settingsRepo.set('savings_initial', plan.convertExact(init));
         this.settingsRepo.set('currency', plan.to.code);
       });
     }

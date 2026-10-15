@@ -25,7 +25,7 @@ No App Store, no Mac and no Apple Developer account are needed. If the link open
 - **Savings.** Every user has a «Отложенные» (savings) category with a monthly amount and a checkmark. *Total saved* on the overview = the amount you already had when you started (set during setup or in settings) + every contribution to the category, all time. The category can't be deleted.
 - **Budget and limits.** A total budget and per-category limits; a new month starts with the previous month's limits.
 - **Month start on payday.** If your salary arrives on the 6th, set the month to start on the 6th: periods are then labelled as ranges («6 окт – 5 ноя»), and a payment due «by the 10th» means the 10th inside that period, so nothing is flagged overdue before payday.
-- **Currencies with conversion.** Hryvnia, US dollar, euro, złoty, tenge, lari. Switching currency converts the total budget and category limits from the current month onward, plus the starting savings amount, at the latest rate. Past months and past entries stay as recorded.
+- **Currencies with conversion.** Hryvnia, US dollar, euro, złoty, tenge, lari. Switching currency converts every amount at the latest rate, in one transaction: budgets and limits for all months, every expense entry (to the cent) and the starting savings amount. The overview, analytics and savings therefore always stay in a single currency.
 - **Backup.** The database file can be saved to Files or sent to yourself in Telegram, then restored on a new phone.
 
 ## Privacy

@@ -165,6 +165,11 @@
       const units = minor / 100 / fromPerEur * toPerEur;
       return Math.max(units > 0 ? 1 : 0, Math.round(units)) * 100;
     },
+    /** Точный перевод до копеек — для записей трат, чтобы история не «плыла» от округлений */
+    convertExact(minor, fromPerEur, toPerEur) {
+      if (!minor) return 0;
+      return Math.max(1, Math.round(minor / fromPerEur * toPerEur));
+    },
     /** Сколько единиц валюты to за 1 единицу from */
     rate(fromPerEur, toPerEur) { return toPerEur / fromPerEur; }
   };
