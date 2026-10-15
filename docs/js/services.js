@@ -30,7 +30,7 @@
   /** Готовый набор категорий для первой настройки (доли от бюджета) */
   const PRESETS = [
     { key: 'home', name: 'Жильё', color: '#2B3A55', share: 0.375, mandatory: true, dueDay: 5, on: true },
-    { key: 'save', name: 'Отложенные', color: '#0F766E', share: 0.06, mandatory: true, dueDay: 15, savings: true, on: true, locked: true },
+    { key: 'save', name: 'Накопления', color: '#0F766E', share: 0.06, mandatory: true, dueDay: 15, savings: true, on: true, locked: true },
     { key: 'food', name: 'Продукты', color: '#23805E', share: 0.21, on: true },
     { key: 'cafe', name: 'Кафе и рестораны', color: '#B84A17', share: 0.1, on: true },
     { key: 'fun', name: 'Развлечения', color: '#6A4FCC', share: 0.1, on: true },
@@ -70,13 +70,13 @@
     periodFor(p, now) { return PeriodLabel.forPhrase(p, this.settings().startDay, now); }
     periodShort(p) { return PeriodLabel.short(p, this.settings().startDay); }
 
-    // ---------------------------------------------------------- Отложенные
-    /** Категория «Отложенные» есть у всех: у старых баз без неё — создаём */
+    // ---------------------------------------------------------- Накопления
+    /** Категория «Накопления» есть у всех: у старых баз без неё — создаём */
     ensureSavingsCategory() {
       if (!this.settings().onboarded || this.categories.savings()) return;
-      this.db.write(() => this.categories.create({ name: 'Отложенные', color: '#0F766E', mandatory: true, dueDay: 15, remindDays: 2, savings: true }));
+      this.db.write(() => this.categories.create({ name: 'Накопления', color: '#0F766E', mandatory: true, dueDay: 15, remindDays: 2, savings: true }));
     }
-    /** Всего отложено = стартовая сумма из настроек + все взносы в «Отложенные» за всё время */
+    /** Всего накоплено = стартовая сумма из настроек + все взносы в «Накопления» за всё время */
     savings() {
       const cat = this.categories.savings();
       const initial = this.settings().savingsInitial;
@@ -143,7 +143,7 @@
 
     /**
      * Меняет валюту и пересчитывает по одному курсу все суммы: бюджеты и лимиты всех месяцев,
-     * все записи трат и стартовую сумму отложенного. Так остаток, аналитика и копилка
+     * все записи трат и стартовую сумму накоплений. Так остаток, аналитика и копилка
      * всегда в одной валюте. Всё в одной транзакции: или пересчиталось всё, или ничего.
      */
     changeCurrency(plan) {
@@ -345,7 +345,7 @@
         this.settingsRepo.set('remind_days', 2);
         const period = Period.ofDate(now, parseInt(this.settingsRepo.get('start_day', '1'), 10));
         this.budgets.setTotal(period, total);
-        const chosen = presets.filter((p) => p.on || p.savings); // «Отложенные» есть у всех
+        const chosen = presets.filter((p) => p.on || p.savings); // «Накопления» есть у всех
         const shareSum = chosen.reduce((s, p) => s + p.share, 0) || 1;
         let allocated = 0;
         chosen.forEach((p, i) => {

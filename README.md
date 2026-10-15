@@ -22,7 +22,7 @@ No App Store, no Mac and no Apple Developer account are needed. If the link open
 - **Quick entry.** Amount from a numeric keypad, category, date and note. You see how the limit will change before you save.
 - **History.** Entries grouped by day, search by note, category filter, editing and deletion.
 - **Analytics.** Spending by day, over six months and over a year, compared with the budget; breakdown by category and the difference from the previous month.
-- **Savings.** Every user has a «Отложенные» (savings) category with a monthly amount and a checkmark. *Total saved* on the overview = the amount you already had when you started (set during setup or in settings) + every contribution to the category, all time. The category can't be deleted.
+- **Savings.** Every user has a «Накопления» (savings) category with a monthly amount and a checkmark. *Total saved* on the overview = the amount you already had when you started (set during setup or in settings) + every contribution to the category, all time. The category can't be deleted.
 - **Budget and limits.** A total budget and per-category limits; a new month starts with the previous month's limits.
 - **Month start on payday.** If your salary arrives on the 6th, set the month to start on the 6th: periods are then labelled as ranges («6 окт – 5 ноя»), and a payment due «by the 10th» means the 10th inside that period, so nothing is flagged overdue before payday.
 - **Currencies with conversion.** Hryvnia, US dollar, euro, złoty, tenge, lari. Switching currency converts every amount at the latest rate, in one transaction: budgets and limits for all months, every expense entry (to the cent) and the starting savings amount. The overview, analytics and savings therefore always stay in a single currency.
@@ -80,7 +80,7 @@ expenses        (id, category_id, amount, spent_at, note)
 fx_rates        (code, per_eur, source, rate_date, fetched_at)
 ```
 
-Amounts are stored as integers in minor units (kopiykas, cents) to avoid rounding errors. Dates are `YYYY-MM-DD HH:MM` strings in local time and are indexed. The schema version is kept in `PRAGMA user_version`, and migrations run on startup. Version 2 added savings, exchange rates, renamed the old «Накопления» category to «Отложенные» and moved users off the removed ruble currencies to the hryvnia.
+Amounts are stored as integers in minor units (kopiykas, cents) to avoid rounding errors. Dates are `YYYY-MM-DD HH:MM` strings in local time and are indexed. The schema version is kept in `PRAGMA user_version`, and migrations run on startup. Version 2 added savings, exchange rates, turned the «Накопления» category into the savings category and moved users off the removed ruble currencies to the hryvnia.
 
 ## Build
 

@@ -1,4 +1,4 @@
-"""Регресс-тест релиза: миграция старой базы, «Отложенные», свайпы, прокрутка, смена валюты офлайн и онлайн.
+"""Регресс-тест релиза: миграция старой базы, «Накопления», свайпы, прокрутка, смена валюты офлайн и онлайн.
 Запуск: python3 test/regress.py <папка старой версии docs>"""
 import http.server
 import os
@@ -60,19 +60,22 @@ with sync_playwright() as p:
     pg.goto(URL); pg.wait_for_selector(".onb-body")
     pg.click('[data-action="onb-demo"]'); pg.wait_for_selector(".hero")
     pg.click('[data-action="open-settings"]'); pg.wait_for_timeout(400)
-    pg.click('[data-action="set-currency"][data-code="RUB"]'); pg.wait_for_timeout(200)
+    had_rub = pg.locator('[data-action="set-currency"][data-code="RUB"]').count() > 0
+    if had_rub:
+        pg.click('[data-action="set-currency"][data-code="RUB"]'); pg.wait_for_timeout(200)
     pg.select_option("#set-start", "6"); pg.wait_for_timeout(900)
     old_label = pg.inner_text(".sample")
-    check("старая версия на рублях", "₽" in old_label, old_label.replace("\n", " "))
+    if had_rub:
+        check("старая версия на рублях", "₽" in old_label, old_label.replace("\n", " "))
 
     # --- 2. Новая версия поверх той же базы
     state["dir"] = NEW
     pg.reload(); pg.wait_for_selector(".hero"); pg.wait_for_timeout(500)
     title = pg.inner_text(".month-btn")
     check("период подписан диапазоном", "–" in title, title)
-    check("рубль заменён гривной", "₴" in pg.inner_text(".hero-big"), pg.inner_text(".hero-big"))
-    check("карточка «Всего отложено» есть", pg.locator(".savings").count() == 1, pg.inner_text(".savings").replace("\n", " ") if pg.locator(".savings").count() else "")
-    check("«Накопления» стали «Отложенными»", "Отложенные" in pg.inner_text("#screen") and "Накопления" not in pg.inner_text("#screen"))
+    check("валюта — гривна", "₴" in pg.inner_text(".hero-big"), pg.inner_text(".hero-big"))
+    check("карточка «Всего накоплено» есть", pg.locator(".savings").count() == 1, pg.inner_text(".savings").replace("\n", " ") if pg.locator(".savings").count() else "")
+    check("копилка называется «Накопления»", "Накопления" in pg.inner_text("#screen") and "Отложенные" not in pg.inner_text("#screen"))
     pg.screenshot(path=str(SHOTS / "r-main.png"))
 
     # --- 3. Бюджет: прокрутка и размер кнопки при многих категориях
@@ -87,10 +90,10 @@ with sync_playwright() as p:
     st = pg.evaluate("document.getElementById('screen').scrollTop")
     check("бюджет прокручивается пальцем", st > 100, st)
 
-    # --- 4. «Отложенные» нельзя удалить
+    # --- 4. «Накопления» нельзя удалить
     pg.evaluate("document.getElementById('screen').scrollTop = 0")
-    pg.locator(".lim-row .who", has_text="Отложенные").first.click(); pg.wait_for_timeout(400)
-    check("у «Отложенных» нет кнопки удаления", pg.locator('[data-action="del-cat"]').count() == 0)
+    pg.locator(".lim-row .who", has_text="Накопления").first.click(); pg.wait_for_timeout(400)
+    check("у «Накоплений» нет кнопки удаления", pg.locator('[data-action="del-cat"]').count() == 0)
 
     # --- 5. Свайп вниз за ручку закрывает лист
     box = pg.locator(".grabber-zone").bounding_box()
@@ -153,7 +156,7 @@ with sync_playwright() as p:
     pg.click('[data-action="convert-ok"]'); pg.wait_for_timeout(400)
     b.close()
 
-    # --- 9. Новая установка: шаг «Сколько уже отложено?»
+    # --- 9. Новая установка: шаг «Сколько уже накоплено?»
     b = p.chromium.launch()
     ctx = b.new_context(viewport={"width": 390, "height": 760}, device_scale_factor=2, has_touch=True, service_workers="block")
     pg = ctx.new_page(); pg.on("pageerror", lambda e: errors.append(str(e)))
@@ -161,14 +164,14 @@ with sync_playwright() as p:
     pg.click('[data-action="onb-next"]'); pg.click('[data-action="onb-next"]')
     for k in "30000": pg.click(f'[data-action="key"][data-k="{k}"]')
     pg.click('[data-action="onb-next"]')
-    check("есть шаг «Сколько уже отложено?»", "отложено" in pg.inner_text(".onb-body").lower())
+    check("есть шаг «Сколько уже накоплено?»", "накоплено" in pg.inner_text(".onb-body").lower())
     for k in "12000": pg.click(f'[data-action="key"][data-k="{k}"]')
     pg.screenshot(path=str(SHOTS / "r-onb-savings.png"))
     pg.click('[data-action="onb-next"]')
     pg.screenshot(path=str(SHOTS / "r-onb-cats.png"))
     pg.click('[data-action="onb-finish"]'); pg.wait_for_selector(".hero")
     sv = pg.inner_text(".savings")
-    check("стартовая сумма попала в «Всего отложено»", "12 000" in sv.replace("\u00a0", " "), sv.replace("\n", " "))
+    check("стартовая сумма попала во «Всего накоплено»", "12 000" in sv.replace("\u00a0", " "), sv.replace("\n", " "))
     b.close()
 
 srv.shutdown()

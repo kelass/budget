@@ -112,9 +112,9 @@
       const parts = [];
       if (sv.initial) parts.push('стартовые ' + fmtR(sv.initial));
       parts.push('взносы ' + fmtR(sv.contributed));
-      out.push(`<button class="savings" data-action="hist-cat" data-id="${sv.cat.id}" aria-label="Всего отложено ${fmtR(sv.total)}. Открыть взносы">
+      out.push(`<button class="savings" data-action="hist-cat" data-id="${sv.cat.id}" aria-label="Всего накоплено ${fmtR(sv.total)}. Открыть взносы">
         ${ava(sv.cat, 44)}
-        <span class="main"><span class="k">Всего отложено</span><span class="v">${fmtR(sv.total)}</span><span class="s">${parts.join(' + ')}</span></span>
+        <span class="main"><span class="k">Всего накоплено</span><span class="v">${fmtR(sv.total)}</span><span class="s">${parts.join(' + ')}</span></span>
         ${svg(P.right, 20, 2.2, 'var(--muted)')}</button>`);
     }
 
@@ -586,7 +586,7 @@
           <label class="opt-row" for="cat-remind"><span>Напомнить</span><span class="val">${(reminds.find(([d]) => d === s.remindDays) || reminds[2])[1]}</span>
             <select id="cat-remind" aria-label="Когда напомнить">${reminds.map(([d, t]) => `<option value="${d}"${d === s.remindDays ? ' selected' : ''}>${t}</option>`).join('')}</select></label>` : ''}
       </div>
-      ${s.savings ? `<p class="cap" style="margin:0">Все взносы в эту категорию копятся в «Всего отложено» на главной. Стартовую сумму можно поменять в настройках.</p>` : ''}
+      ${s.savings ? `<p class="cap" style="margin:0">Все взносы в эту категорию копятся во «Всего накоплено» на главной. Стартовую сумму можно поменять в настройках.</p>` : ''}
       <div style="flex:1"></div>
       <button class="btn-primary" data-action="save-cat">${s.id ? 'Сохранить' : 'Создать категорию'}</button>
       ${s.id && !s.savings ? `<button class="btn-danger${s.confirmDel ? ' confirm' : ''}" data-action="del-cat">${s.confirmDel ? 'Нажмите ещё раз: ' + delText.toLowerCase() : 'Удалить категорию'}</button>` : ''}`;
@@ -670,7 +670,7 @@
         <div class="opt-row"><span>Бюджет</span><span style="font-weight:700;white-space:nowrap">${Money.format(pl.totalBefore, pl.from.sym, { noFraction: true })} → ${Money.format(pl.totalAfter, pl.to.sym, { noFraction: true })}</span></div>
         <div class="opt-row"><span>Потрачено</span><span style="font-weight:700;white-space:nowrap">${Money.format(pl.spentBefore, pl.from.sym, { noFraction: true })} → ${Money.format(pl.spentAfter, pl.to.sym, { noFraction: true })}</span></div>
       </div>
-      <p class="cap" style="margin:0">Пересчитаются все суммы по этому курсу: бюджеты и лимиты, все записи трат, в том числе за прошлые месяцы, и стартовая сумма отложенного.</p>
+      <p class="cap" style="margin:0">Пересчитаются все суммы по этому курсу: бюджеты и лимиты, все записи трат, в том числе за прошлые месяцы, и стартовая сумма накоплений.</p>
       <button class="btn-primary" data-action="convert-ok">Перевести в ${esc(to.code)}</button>`;
   }
 
@@ -704,12 +704,12 @@
       <div class="card" role="radiogroup" aria-label="Валюта" style="border-radius:18px;padding:0 16px">${CURRENCIES.map((c) =>
         `<button class="radio-row" role="radio" aria-checked="${c.code === st.currency.code}" data-action="set-currency" data-code="${c.code}">
           <span class="sym">${esc(c.sym)}</span><span class="nm">${esc(c.name)}</span><span class="cd">${c.code}</span><span class="ck">${svg(P.check, 18, 2.6, 'var(--link)')}</span></button>`).join('')}</div>
-      <p class="cap" style="margin:0 4px 6px">При смене валюты все суммы — бюджеты, лимиты, записи и отложенное — пересчитываются по курсу. ${rateNote()}</p>
-      <h2 class="label-up">Отложенные</h2>
+      <p class="cap" style="margin:0 4px 6px">При смене валюты все суммы — бюджеты, лимиты, записи и накопления — пересчитываются по курсу. ${rateNote()}</p>
+      <h2 class="label-up">Накопления</h2>
       <div class="card" style="border-radius:18px;padding:0 16px">
-        <div class="opt-row"><span>Было отложено до начала учёта</span><span class="val">${fmtR(st.savingsInitial)}</span><button class="cover" data-action="edit-savings" aria-label="Изменить стартовую сумму отложенного"></button></div>
+        <div class="opt-row"><span>Было накоплено до начала учёта</span><span class="val">${fmtR(st.savingsInitial)}</span><button class="cover" data-action="edit-savings" aria-label="Изменить стартовую сумму накоплений"></button></div>
       </div>
-      <p class="cap" style="margin:0 4px 6px">Всего отложено = эта сумма + все взносы в категорию «Отложенные».</p>
+      <p class="cap" style="margin:0 4px 6px">Всего накоплено = эта сумма + все взносы в категорию «Накопления».</p>
       <h2 class="label-up">Месяц и напоминания</h2>
       <div class="card" style="border-radius:18px;padding:0 16px">
         <label class="opt-row" for="set-start"><span>Начало месяца</span><span class="val">${st.startDay} число</span>
@@ -765,7 +765,7 @@
         ${amountDisplay(o.amount)}<div style="flex:1"></div>${keypad()}`;
       foot = `<button class="btn-primary" data-action="onb-next" ${Money.parse(o.amount) > 0 ? '' : 'disabled'}>Дальше</button>`;
     } else if (o.step === 3) {
-      body = `${backBtn}${steps(3)}<h1>Сколько уже отложено?</h1><p>Деньги, которые у вас уже есть в копилке или на вкладе. Дальше к ним будут прибавляться взносы в категорию «Отложенные».</p>
+      body = `${backBtn}${steps(3)}<h1>Сколько уже накоплено?</h1><p>Деньги, которые у вас уже есть в копилке или на вкладе. Дальше к ним будут прибавляться взносы в категорию «Накопления».</p>
         ${amountDisplay(o.sav.amount)}<div style="flex:1"></div>${keypad()}`;
       foot = `<button class="btn-primary" data-action="onb-next">${Money.parse(o.sav.amount) > 0 ? 'Дальше' : 'Пока ничего, дальше'}</button>`;
     } else {
@@ -874,7 +874,7 @@
       svc.setTotal(S.period, v); closeSheet(); render(); toast('Бюджет обновлён');
     },
     'edit-savings'() {
-      openSheet({ type: 'amount', kind: 'savings', title: 'Было отложено', amount: st.savingsInitial ? Money.toInput(st.savingsInitial) : '', hint: 'Сумма, которая уже была отложена до начала учёта в приложении' });
+      openSheet({ type: 'amount', kind: 'savings', title: 'Было накоплено', amount: st.savingsInitial ? Money.toInput(st.savingsInitial) : '', hint: 'Сумма, которая уже была накоплена до начала учёта в приложении' });
     },
     'copy-prev'() {
       const vm = svc.budget(S.period);

@@ -92,7 +92,7 @@
     CREATE INDEX ix_expenses_spent_at     ON expenses(spent_at);
     CREATE INDEX ix_expenses_cat_spent_at ON expenses(category_id, spent_at);
     `,
-    // v2 — копилка «Отложенные», курсы валют, убраны рубли
+    // v2 — копилка «Накопления» (признак is_savings), курсы валют, убраны рубли
     (db) => {
       db.exec(`
         ALTER TABLE categories ADD COLUMN is_savings INTEGER NOT NULL DEFAULT 0 CHECK (is_savings IN (0, 1));
@@ -109,12 +109,14 @@
       const st = db.prepare('INSERT INTO fx_rates(code, per_eur, source, rate_date) VALUES (?, ?, ?, ?)');
       BUILTIN_RATES.forEach(([code, rate]) => st.run([code, rate, 'builtin', BUILTIN_RATES_DATE]));
       st.free();
-      // Бывшие «Накопления» становятся «Отложенными»
-      db.exec(`UPDATE categories SET is_savings = 1, name = 'Отложенные'
+      // Категория «Накопления» становится копилкой
+      db.exec(`UPDATE categories SET is_savings = 1
                WHERE id = (SELECT id FROM categories WHERE archived = 0 AND name = 'Накопления' ORDER BY id LIMIT 1)`);
       // Рубли больше не поддерживаются — переключаем на гривну
       db.exec(`UPDATE settings SET value = 'UAH' WHERE key = 'currency' AND value IN ('RUB', 'BYN')`);
-    }
+    },
+    // v3 — копилка снова называется «Накопления» (в v2 её переименовывали в «Отложенные»)
+    `UPDATE categories SET name = 'Накопления' WHERE is_savings = 1 AND name = 'Отложенные';`
   ];
 
   /** Встроенные курсы на случай, если приложение ни разу не выходило в сеть */
@@ -241,7 +243,7 @@
     hasExpenses(id) { return !!this.db.value('SELECT 1 FROM expenses WHERE category_id = ? LIMIT 1', [id]); }
     /** Категорию с записями прячем в архив, чтобы история не сломалась; пустую — удаляем. */
     remove(id) {
-      if (this.db.value('SELECT is_savings FROM categories WHERE id = ?', [id])) throw new Error('Категорию «Отложенные» удалить нельзя');
+      if (this.db.value('SELECT is_savings FROM categories WHERE id = ?', [id])) throw new Error('Категорию «Накопления» удалить нельзя');
       if (this.hasExpenses(id)) this.db.run('UPDATE categories SET archived = 1 WHERE id = ?', [id]);
       else this.db.run('DELETE FROM categories WHERE id = ?', [id]);
     }
@@ -385,7 +387,7 @@
   // ---------------------------------------------------------- Демо-данные ---
   const DEMO_CATEGORIES = [
     { name: 'Жильё', color: '#2B3A55', limit: 45000, mandatory: true, dueDay: 5 },
-    { name: 'Отложенные', color: '#0F766E', limit: 7000, mandatory: true, dueDay: 15, savings: true },
+    { name: 'Накопления', color: '#0F766E', limit: 7000, mandatory: true, dueDay: 15, savings: true },
     { name: 'Продукты', color: '#23805E', limit: 25000, base: 27300, ticket: 1400, notes: ['Магазин у дома', 'Продукты на неделю', 'Рынок', 'Супермаркет', 'Пекарня', 'Фрукты и овощи'] },
     { name: 'Кафе и рестораны', color: '#B84A17', limit: 12000, base: 11800, ticket: 900, notes: ['Кофе с собой', 'Ужин с друзьями', 'Обед в кафе', 'Бизнес-ланч', 'Доставка пиццы', 'Завтрак в кафе'] },
     { name: 'Развлечения', color: '#6A4FCC', limit: 12000, base: 9100, ticket: 1500, notes: ['Кино, 2 билета', 'Концерт', 'Боулинг', 'Книга', 'Настольная игра', 'Музей'] },
