@@ -20,12 +20,15 @@ No App Store, no Mac and no Apple Developer account are needed. If the link open
 - **Month overview.** How much is left, how much you can spend per day to make it to the end of the month, and how much you have spent today. A marker on the progress bar shows how much of the month has already passed.
 - **Mandatory payments.** Rent, savings and other required expenses with a due date. The checkmark appears automatically once entries in the category add up to the required amount. A reminder shows up in advance.
 - **Quick entry.** Amount from a numeric keypad, category, date and note. You see how the limit will change before you save.
-- **History.** Entries grouped by day, search by note, category filter, editing and deletion.
+- **Income.** The same entry sheet has an «Зачисление» tab: amount, type (advance, salary, bonus, side job, cashback, debt repaid, or your own saved types), date, where it came from, and an «expect every month» switch. An expected income takes its amount and day from the entry; if it isn't recorded two days after that day, the overview shows a reminder. Income does not change the month's remaining budget — the budget is the plan, and income is compared against it.
+- **Income analytics.** The last closed month against the plan, a chart of each month's deviation from the plan in percent (green above, red below; the current month shows once it beats the plan or closes), current-month progress, and this month's income with expected payments.
+- **History.** Expenses and income grouped by day, search by note or source, an income filter and category filters, editing and deletion.
+- **Categories on the overview.** All non-mandatory categories, four per page, swiped sideways like iPhone home screens.
 - **Analytics.** Spending by day, over six months and over a year, compared with the budget; breakdown by category and the difference from the previous month.
 - **Savings.** Every user has a «Накопления» (savings) category with a monthly amount and a checkmark. *Total saved* on the overview = the amount you already had when you started (set during setup or in settings) + every contribution to the category, all time. The category can't be deleted.
 - **Budget and limits.** A total budget and per-category limits; a new month starts with the previous month's limits.
 - **Month start on payday.** If your salary arrives on the 6th, set the month to start on the 6th: periods are then labelled as ranges («6 окт – 5 ноя»), and a payment due «by the 10th» means the 10th inside that period, so nothing is flagged overdue before payday.
-- **Currencies with conversion.** Hryvnia, US dollar, euro, złoty, tenge, lari. Switching currency converts every amount at the latest rate, in one transaction: budgets and limits for all months, every expense entry (to the cent) and the starting savings amount. The overview, analytics and savings therefore always stay in a single currency.
+- **Currencies with conversion.** Hryvnia, US dollar, euro, złoty, tenge, lari. Switching currency converts every amount at the latest rate, in one transaction: budgets and limits for all months, every expense and income entry (to the cent), expected incomes and the starting savings amount. The overview, analytics and savings therefore always stay in a single currency.
 - **Backup.** The database file can be saved to Files or sent to yourself in Telegram, then restored on a new phone.
 
 ## Privacy
@@ -77,10 +80,13 @@ categories      (id, name, color, sort, is_mandatory, due_day, remind_days, arch
 budgets         (period, total)                       -- period = 'YYYY-MM'
 category_limits (period, category_id, amount)         -- for a mandatory category: the amount to pay
 expenses        (id, category_id, amount, spent_at, note)
+income_types    (id, name, sort, builtin, archived)
+incomes         (id, type_id, amount, received_at, source)
+income_plans    (type_id, amount, day, source)          -- «expect every month»
 fx_rates        (code, per_eur, source, rate_date, fetched_at)
 ```
 
-Amounts are stored as integers in minor units (kopiykas, cents) to avoid rounding errors. Dates are `YYYY-MM-DD HH:MM` strings in local time and are indexed. The schema version is kept in `PRAGMA user_version`, and migrations run on startup. Version 2 added savings, exchange rates, turned the «Накопления» category into the savings category and moved users off the removed ruble currencies to the hryvnia.
+Amounts are stored as integers in minor units (kopiykas, cents) to avoid rounding errors. Dates are `YYYY-MM-DD HH:MM` strings in local time and are indexed. The schema version is kept in `PRAGMA user_version`, and migrations run on startup. Version 2 added savings, exchange rates, turned the «Накопления» category into the savings category and moved users off the removed ruble currencies to the hryvnia. Version 4 added income.
 
 ## Build
 
@@ -91,6 +97,7 @@ npm install
 python3 build_pwa.py   # installable app → docs/
 python3 build.py       # single-page simulation → dist/budget.html
 python3 test/regress.py <old docs folder>   # migration, gestures, savings, currency checks
+python3 test/income.py                      # income, reminders, income analytics, category pages
 ```
 
 To publish changes, commit the updated `docs/` folder to the `main` branch. GitHub Pages serves it automatically, and users get a "new version available" banner in the app.

@@ -223,7 +223,7 @@ button { cursor: pointer; }
 .lim-row .who .main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .lim-row .nm { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .lim-row .nm span:first-child { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lim-row .sp { font-size: 12px; color: var(--muted); font-weight: 500; white-space: nowrap; }
+.lim-row .sp { font-size: 14px; color: var(--ink-2); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lim-row .sp.warn { color: var(--warn); }
 .lim-input { display: flex; align-items: center; gap: 4px; background: var(--bg); border-radius: 10px; height: 36px; padding: 0 10px; width: 108px; flex-shrink: 0; }
 .lim-input input { border: 0; outline: 0; background: transparent; width: 100%; min-width: 0; text-align: right; font-size: 15px; font-weight: 700; padding: 0; }
@@ -375,3 +375,68 @@ button { cursor: pointer; }
 .grabber-zone { flex-shrink: 0; height: 22px; display: flex; align-items: center; justify-content: center; touch-action: none; cursor: grab; }
 .grabber { width: 40px; height: 5px; background: #C9CBC6; border-radius: 3px; }
 .sheet-head { touch-action: none; }
+
+/* ---------------------------------------------------------------- Зачисления */
+.seg.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.chip.inc { border-color: #9CCFB8; background: var(--accent-soft); color: var(--accent-ink); font-weight: 700; }
+.chip.inc[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #FFFFFF; }
+.inc-ava { font-size: 11px; font-weight: 800; width: 38px; height: 38px; border-radius: 12px; }
+.inc-ava.exp { background: transparent; border: 1.5px dashed #8E949F; color: var(--ink-2); }
+.amt.good, .good { color: var(--accent-ink); }
+.sub.bad { color: var(--warn); }
+.inc-pill { font-size: 15px; font-weight: 800; padding: 5px 11px; border-radius: 12px; }
+.inc-pill.up { color: #0E3B2B; background: #6EE7B7; }
+.inc-pill.down { color: #4A140E; background: #F5A08F; }
+.inc-bar { position: relative; height: 12px; background: var(--dark-3); border-radius: 6px; display: flex; }
+.inc-bar > div { height: 100%; }
+.inc-bar i { position: absolute; top: -4px; width: 2px; height: 20px; background: #FFFFFF; margin-left: -1px; }
+.inc-chart { position: relative; display: flex; gap: 10px; }
+.inc-chart::before { content: ''; position: absolute; left: 0; right: 0; top: var(--h); border-top: 1.5px solid var(--ink); opacity: 0.35; }
+.inc-col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; }
+.inc-col .up { height: var(--h); width: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; }
+.inc-col .dn { height: var(--h); width: 100%; display: flex; flex-direction: column; justify-content: flex-start; align-items: center; gap: 4px; }
+.inc-col .b { width: 100%; }
+.inc-col .b.pos { background: #23805E; border-radius: 7px 7px 2px 2px; }
+.inc-col .b.neg { background: #C9362B; border-radius: 2px 2px 7px 7px; }
+.inc-col .pend { width: 100%; height: 24px; border: 1.5px dashed #B8BAB4; border-bottom: 0; border-radius: 7px 7px 0 0; }
+.inc-col .lbl { font-size: 11px; font-weight: 800; white-space: nowrap; }
+.inc-col .lbl.muted { font-size: 10px; font-weight: 700; color: var(--muted); }
+.inc-col .lbl.bad { color: #A42A21; }
+.inc-name { font-size: 12px; color: var(--muted); font-weight: 500; margin-top: 4px; white-space: nowrap; }
+.inc-name.on { color: var(--ink); font-weight: 700; }
+.inc-legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-2); flex-wrap: wrap; }
+.inc-legend span { display: flex; align-items: center; gap: 6px; }
+.inc-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.exp-row { opacity: 0.9; }
+
+.seg.kind { width: 220px; padding: 3px; border-radius: 11px; }
+.seg.kind button { height: 30px; border-radius: 8px; }
+.seg.kind button.inc-tab[aria-pressed="true"] { color: var(--accent-ink); }
+.sheet-head .seg.kind { justify-self: center; }
+.amount .c.plus { color: var(--accent-ink); }
+.type-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.type-chip { height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid var(--chip-line); background: var(--card); font-size: 14px; font-weight: 500; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.type-chip[aria-checked="true"] { background: var(--dark); color: #FFFFFF; border-color: var(--dark); font-weight: 700; }
+.type-chip.add { border: 1.5px dashed #B8BAB4; background: transparent; color: var(--ink-2); font-weight: 600; }
+.type-chip.del { background: var(--warn); border-color: var(--warn); color: #FFFFFF; font-weight: 700; }
+.new-type { display: flex; gap: 8px; width: 100%; align-items: center; }
+.new-type .input { height: 40px; font-size: 15px; }
+.inline-input { border: 0; outline: 0; background: transparent; text-align: right; font-size: 15px; font-weight: 600; width: 60%; min-width: 0; padding: 0; }
+.plan-card { background: var(--accent-soft); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.plan-card .pl-top { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--ink-2); flex-wrap: wrap; }
+.plan-card .pl-top b { color: var(--ink); }
+.plan-card .pl-k { color: var(--accent-ink); font-weight: 700; }
+.plan-card .pl-bar { height: 8px; background: #FFFFFF; border-radius: 4px; display: flex; overflow: hidden; }
+.plan-card .pl-note { font-size: 12px; color: var(--accent-ink); line-height: 1.4; }
+.btn-primary.green { background: var(--accent); }
+.banner.inc-banner { background: var(--accent-soft); color: #0E3B2B; }
+.banner.inc-banner b { color: var(--accent-ink); }
+
+/* Категории на главной: страницы по 4, листаются вбок */
+.cat-pages { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 12px; border-radius: 22px; scrollbar-width: none; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+.cat-pages::-webkit-scrollbar { display: none; }
+.cat-page { flex: 0 0 100%; scroll-snap-align: start; scroll-snap-stop: always; min-width: 0; }
+.dots { display: flex; justify-content: center; gap: 4px; }
+.dot { width: 22px; height: 22px; border: 0; background: transparent; padding: 0; display: flex; align-items: center; justify-content: center; }
+.dot::before { content: ''; width: 7px; height: 7px; border-radius: 4px; background: #C9CBC6; transition: background 0.2s, width 0.2s; }
+.dot[aria-selected="true"]::before { background: var(--ink); width: 16px; }

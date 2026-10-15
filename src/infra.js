@@ -116,7 +116,37 @@
       db.exec(`UPDATE settings SET value = 'UAH' WHERE key = 'currency' AND value IN ('RUB', 'BYN')`);
     },
     // v3 — копилка снова называется «Накопления» (в v2 её переименовывали в «Отложенные»)
-    `UPDATE categories SET name = 'Накопления' WHERE is_savings = 1 AND name = 'Отложенные';`
+    `UPDATE categories SET name = 'Накопления' WHERE is_savings = 1 AND name = 'Отложенные';`,
+    // v4 — зачисления: типы, сами поступления и ожидаемые ежемесячные
+    `
+    CREATE TABLE income_types (
+      id       INTEGER PRIMARY KEY,
+      name     TEXT    NOT NULL,
+      sort     INTEGER NOT NULL DEFAULT 0,
+      builtin  INTEGER NOT NULL DEFAULT 0 CHECK (builtin IN (0, 1)),
+      archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1))
+    );
+    INSERT INTO income_types(name, sort, builtin) VALUES
+      ('Аванс', 1, 1), ('Зарплата', 2, 1), ('Премия', 3, 1), ('Подработка', 4, 1), ('Кэшбэк', 5, 1), ('Возврат долга', 6, 1);
+
+    CREATE TABLE incomes (
+      id          INTEGER PRIMARY KEY,
+      type_id     INTEGER NOT NULL REFERENCES income_types(id) ON DELETE RESTRICT,
+      amount      INTEGER NOT NULL CHECK (amount > 0),
+      received_at TEXT    NOT NULL,            -- 'YYYY-MM-DD HH:MM', локальное время
+      source      TEXT    NOT NULL DEFAULT '', -- «Откуда»
+      created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX ix_incomes_received_at ON incomes(received_at);
+
+    -- «Ждать каждый месяц»: одно ожидание на тип зачисления
+    CREATE TABLE income_plans (
+      type_id INTEGER PRIMARY KEY REFERENCES income_types(id) ON DELETE CASCADE,
+      amount  INTEGER NOT NULL CHECK (amount > 0),
+      day     INTEGER NOT NULL CHECK (day BETWEEN 1 AND 31),
+      source  TEXT    NOT NULL DEFAULT ''
+    ) WITHOUT ROWID;
+    `
   ];
 
   /** Встроенные курсы на случай, если приложение ни разу не выходило в сеть */
@@ -332,6 +362,60 @@
     count() { return this.db.value('SELECT COUNT(*) FROM expenses'); }
   }
 
+  class IncomeRepository {
+    constructor(db) { this.db = db; }
+    // --- типы
+    types() { return this.db.all('SELECT id, name, builtin FROM income_types WHERE archived = 0 ORDER BY sort, id').map((r) => ({ id: r.id, name: r.name, builtin: !!r.builtin, tag: incomeTag(r.name) })); }
+    typesById() { const m = new Map(); this.db.all('SELECT id, name, builtin FROM income_types').forEach((r) => m.set(r.id, { id: r.id, name: r.name, builtin: !!r.builtin, tag: incomeTag(r.name) })); return m; }
+    addType(name) {
+      const existing = this.db.get('SELECT id, archived FROM income_types WHERE lower(name) = lower(?)', [name]);
+      if (existing) { if (existing.archived) this.db.run('UPDATE income_types SET archived = 0 WHERE id = ?', [existing.id]); return existing.id; }
+      const sort = this.db.value('SELECT COALESCE(MAX(sort), 0) + 1 FROM income_types');
+      this.db.run('INSERT INTO income_types(name, sort) VALUES (?, ?)', [name, sort]);
+      return this.db.lastId();
+    }
+    /** Свой тип с записями прячем, без записей — удаляем; встроенные не трогаем */
+    removeType(id) {
+      if (this.db.value('SELECT builtin FROM income_types WHERE id = ?', [id])) throw new Error('Встроенный тип удалить нельзя');
+      this.db.run('DELETE FROM income_plans WHERE type_id = ?', [id]);
+      if (this.db.value('SELECT 1 FROM incomes WHERE type_id = ? LIMIT 1', [id])) this.db.run('UPDATE income_types SET archived = 1 WHERE id = ?', [id]);
+      else this.db.run('DELETE FROM income_types WHERE id = ?', [id]);
+    }
+    // --- зачисления
+    byId(id) { return this.db.get('SELECT * FROM incomes WHERE id = ?', [id]); }
+    add(e) { this.db.run('INSERT INTO incomes(type_id, amount, received_at, source) VALUES (?, ?, ?, ?)', [e.typeId, e.amount, e.receivedAt, e.source || '']); return this.db.lastId(); }
+    update(id, e) { this.db.run('UPDATE incomes SET type_id = ?, amount = ?, received_at = ?, source = ? WHERE id = ?', [e.typeId, e.amount, e.receivedAt, e.source || '', id]); }
+    remove(id) { this.db.run('DELETE FROM incomes WHERE id = ?', [id]); }
+    list(range, query) {
+      let sql = 'SELECT i.id, i.type_id, i.amount, i.received_at, i.source FROM incomes i JOIN income_types t ON t.id = i.type_id WHERE i.received_at >= ? AND i.received_at < ?';
+      const p = [range.startKey, range.endKey];
+      if (query) { sql += " AND (i.source LIKE ? ESCAPE '\\' OR t.name LIKE ? ESCAPE '\\')"; const q = '%' + query.replace(/[\\%_]/g, (m) => '\\' + m) + '%'; p.push(q, q); }
+      return this.db.all(sql + ' ORDER BY i.received_at DESC, i.id DESC', p);
+    }
+    sum(range) { return this.db.value('SELECT COALESCE(SUM(amount), 0) FROM incomes WHERE received_at >= ? AND received_at < ?', [range.startKey, range.endKey]); }
+    receivedTypes(range) { return new Set(this.db.all('SELECT DISTINCT type_id FROM incomes WHERE received_at >= ? AND received_at < ?', [range.startKey, range.endKey]).map((r) => r.type_id)); }
+    lastSource(typeId) { return this.db.value("SELECT source FROM incomes WHERE type_id = ? AND source != '' ORDER BY received_at DESC LIMIT 1", [typeId]) || ''; }
+    // --- ожидания
+    plans() { return this.db.all('SELECT type_id, amount, day, source FROM income_plans'); }
+    plan(typeId) { return this.db.get('SELECT type_id, amount, day, source FROM income_plans WHERE type_id = ?', [typeId]); }
+    setPlan(typeId, amount, day, source) {
+      this.db.run('INSERT INTO income_plans(type_id, amount, day, source) VALUES (?, ?, ?, ?) ON CONFLICT(type_id) DO UPDATE SET amount = excluded.amount, day = excluded.day, source = excluded.source', [typeId, amount, day, source || '']);
+    }
+    removePlan(typeId) { this.db.run('DELETE FROM income_plans WHERE type_id = ?', [typeId]); }
+    /** Пересчёт при смене валюты (вызывается внутри общей транзакции) */
+    convertAll(factor) {
+      this.db.run('UPDATE incomes SET amount = MAX(1, CAST(ROUND(amount * ?) AS INTEGER))', [factor]);
+      this.db.run('UPDATE income_plans SET amount = MAX(1, CAST(ROUND(amount * ?) AS INTEGER))', [factor]);
+    }
+  }
+  /** Короткая метка для значка типа: «ЗП», «АВ», «КБ» */
+  const INCOME_TAGS = { 'Зарплата': 'ЗП', 'Аванс': 'АВ', 'Премия': 'ПР', 'Подработка': 'ПД', 'Кэшбэк': 'КБ', 'Возврат долга': 'ВД' };
+  function incomeTag(name) {
+    if (INCOME_TAGS[name]) return INCOME_TAGS[name];
+    const w = name.trim().split(/\s+/);
+    return (w.length > 1 ? w[0][0] + w[1][0] : name.trim().slice(0, 2)).toUpperCase();
+  }
+
   class FxRepository {
     constructor(db) { this.db = db; }
     all() { const m = new Map(); this.db.all('SELECT code, per_eur, source, rate_date, fetched_at FROM fx_rates').forEach((r) => m.set(r.code, r)); return m; }
@@ -455,6 +539,27 @@
       });
     });
 
+    // Зачисления: зарплата 10-го, аванс 25-го, иногда подработка, кэшбэк 1-го
+    if (repos.incomes) {
+      const types = new Map(repos.incomes.types().map((t) => [t.name, t.id]));
+      const addInc = (name, units, date, source) => {
+        const at2 = Dates.stamp(date);
+        if (at2 > nowStamp) return;
+        repos.incomes.add({ typeId: types.get(name), amount: Math.round(units) * 100, receivedAt: at2, source });
+      };
+      const salary = [76000, 70000, 80000, 72000, 76000, 72000];
+      const advance = [45000, 42200, 46000, 44800, 45000, 45000];
+      const extra = [2500, 0, 8400, 0, 9000, 14500];
+      periods.forEach((p, pi) => {
+        addInc('Кэшбэк', 1500, at(p, 1, 9, 0), 'банк');
+        if (extra[pi]) addInc('Подработка', extra[pi], at(p, 7, 18, 30), 'дизайн-заказ');
+        addInc('Зарплата', salary[pi], at(p, 10, 11, 0), 'основная работа');
+        addInc('Аванс', advance[pi], at(p, 25, 11, 0), 'основная работа');
+      });
+      repos.incomes.setPlan(types.get('Зарплата'), 72000 * 100, 10, 'основная работа');
+      repos.incomes.setPlan(types.get('Аванс'), 45000 * 100, 25, 'основная работа');
+    }
+
     // Последние три дня — как в макете истории
     const d = (back, h, m) => { const x = new Date(now); x.setDate(x.getDate() - back); x.setHours(h, m, 0, 0); return x; };
     add(2, 1240, d(0, Math.min(18, now.getHours()), 40), 'Магазин у дома');
@@ -466,5 +571,5 @@
     add(2, 4860, d(2, 19, 20), 'Продукты на неделю');
   }
 
-  root.Infra = { DeviceFileStore, SqliteDatabase, SettingsRepository, CategoryRepository, BudgetRepository, ExpenseRepository, FxRepository, RatesClient, seedDemo };
+  root.Infra = { DeviceFileStore, SqliteDatabase, SettingsRepository, CategoryRepository, BudgetRepository, ExpenseRepository, IncomeRepository, FxRepository, RatesClient, seedDemo };
 })(window);

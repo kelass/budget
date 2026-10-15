@@ -47,6 +47,7 @@
       this.budgets = new I.BudgetRepository(db);
       this.expenses = new I.ExpenseRepository(db);
       this.fx = new I.FxRepository(db);
+      this.incomes = new I.IncomeRepository(db);
       this._ratesSynced = false;
     }
 
@@ -150,6 +151,7 @@
       this.db.write(() => {
         this.budgets.convertAll(plan.convert);
         this.expenses.convertAll(plan.factor);
+        this.incomes.convertAll(plan.factor);
         const init = parseInt(this.settingsRepo.get('savings_initial', '0'), 10);
         if (init) this.settingsRepo.set('savings_initial', plan.convertExact(init));
         this.settingsRepo.set('currency', plan.to.code);
@@ -217,19 +219,109 @@
     }
 
     // ------------------------------------------------------------ История
-    history(period, filter) {
+    /**
+     * История за период. filter.kind: 'all' — траты и зачисления вместе, 'income' — только зачисления,
+     * по категории (categoryId) — только траты этой категории.
+     */
+    history(period, filter = {}) {
       const r = this.range(period);
-      const rows = this.expenses.list(r, filter);
-      const byId = this.categories.allById();
+      const kind = filter.categoryId ? 'expense' : (filter.kind || 'all');
+      const items = [];
+      if (kind !== 'income') {
+        const byId = this.categories.allById();
+        this.expenses.list(r, filter).forEach((row) => items.push({ kind: 'expense', at: row.spent_at, ...row, cat: byId.get(row.category_id) }));
+      }
+      if (kind !== 'expense') {
+        const types = this.incomes.typesById();
+        this.incomes.list(r, filter.query).forEach((row) => items.push({ kind: 'income', at: row.received_at, ...row, type: types.get(row.type_id) }));
+      }
+      items.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : b.id - a.id));
       const days = [];
       let cur = null;
-      rows.forEach((row) => {
-        const d = row.spent_at.slice(0, 10);
-        if (!cur || cur.key !== d) { cur = { key: d, total: 0, items: [] }; days.push(cur); }
-        cur.total += row.amount;
-        cur.items.push({ ...row, cat: byId.get(row.category_id) });
+      items.forEach((it) => {
+        const d = it.at.slice(0, 10);
+        if (!cur || cur.key !== d) { cur = { key: d, spent: 0, received: 0, items: [] }; days.push(cur); }
+        if (it.kind === 'income') cur.received += it.amount; else cur.spent += it.amount;
+        cur.items.push(it);
       });
-      return { total: this.expenses.sum(r), filteredTotal: rows.reduce((s, x) => s + x.amount, 0), days, count: rows.length };
+      const spent = items.filter((x) => x.kind === 'expense').reduce((s, x) => s + x.amount, 0);
+      const received = items.filter((x) => x.kind === 'income').reduce((s, x) => s + x.amount, 0);
+      return { total: this.expenses.sum(r), spent, received, days, count: items.length };
+    }
+
+    // ---------------------------------------------------------- Зачисления
+    incomeTypes() { return this.incomes.types(); }
+    addIncomeType(name) {
+      const n = (name || '').trim();
+      if (!n) throw new Error('Введите название типа');
+      if (n.length > 24) throw new Error('Название длиннее 24 символов');
+      return this.db.write(() => this.incomes.addType(n));
+    }
+    removeIncomeType(id) { this.db.write(() => this.incomes.removeType(id)); }
+    income(id) { return this.incomes.byId(id); }
+    incomePlan(typeId) { return this.incomes.plan(typeId); }
+    lastIncomeSource(typeId) { return this.incomes.lastSource(typeId); }
+
+    /**
+     * Сохраняет зачисление. repeat=true — «ждать каждый месяц»: сумма и число берутся из этого
+     * зачисления. repeat=false — ожидание для этого типа снимается.
+     */
+    saveIncome(e) {
+      if (!(e.amount > 0)) throw new Error('Введите сумму больше нуля');
+      if (!e.typeId) throw new Error('Выберите, что пришло');
+      return this.db.write(() => {
+        const id = e.id ? (this.incomes.update(e.id, e), e.id) : this.incomes.add(e);
+        if (e.repeat) this.incomes.setPlan(e.typeId, e.amount, parseInt(e.receivedAt.slice(8, 10), 10), e.source);
+        else this.incomes.removePlan(e.typeId);
+        return id;
+      });
+    }
+    deleteIncome(id) { this.db.write(() => this.incomes.remove(id)); }
+
+    /** Ожидаемые зачисления периода, которые ещё не пришли */
+    expectedIncomes(period, now) {
+      const st = this.settings();
+      const r = this.range(period);
+      const got = this.incomes.receivedTypes(r);
+      const types = this.incomes.typesById();
+      return this.incomes.plans()
+        .filter((pl) => !got.has(pl.type_id) && types.get(pl.type_id))
+        .map((pl) => {
+          const due = BudgetMath.dueDate(period, st.startDay, pl.day);
+          const late = Dates.diffDays(due, now);
+          return { type: types.get(pl.type_id), amount: pl.amount, source: pl.source, due, late, remind: late >= 2 && now < r.end };
+        })
+        .sort((a, b) => a.due - b.due);
+    }
+
+    /** Экран «Аналитика → Зачисления» */
+    incomeStats(now) {
+      const cur = this.currentPeriod(now);
+      const list = Period.lastN(cur, 6);
+      const bars = list.map((p) => {
+        const plan = this.budgets.total(p) || 0;
+        const got = this.incomes.sum(this.range(p));
+        const closed = p !== cur;
+        const pct = plan > 0 ? (got - plan) / plan * 100 : null;
+        // Текущий месяц показываем столбцом, только если план уже перевыполнен
+        const pending = !closed && !(plan > 0 && got >= plan);
+        return { key: p, plan, got, closed, pct, pending, empty: closed && got === 0 };
+      });
+      const closedWithData = bars.filter((b) => b.closed && b.got > 0 && b.pct != null);
+      const heroBar = closedWithData.length ? closedWithData[closedWithData.length - 1] : bars[bars.length - 1];
+      const avg = closedWithData.length ? closedWithData.reduce((s, b) => s + b.pct, 0) / closedWithData.length : null;
+      const r = this.range(cur);
+      const types = this.incomes.typesById();
+      const items = this.incomes.list(r).map((row) => ({ ...row, type: types.get(row.type_id) }));
+      return { cur, bars, hero: heroBar, avg, avgCount: closedWithData.length, current: bars[bars.length - 1], items, expected: this.expectedIncomes(cur, now), periodEnd: new Date(r.end.getTime() - 86400000) };
+    }
+
+    /** Данные для карточки плана в окне зачисления */
+    incomeContext(period, excludeId) {
+      const r = this.range(period);
+      let got = this.incomes.sum(r);
+      if (excludeId) { const e = this.incomes.byId(excludeId); if (e && e.received_at >= r.startKey && e.received_at < r.endKey) got -= e.amount; }
+      return { plan: this.budgets.total(period) || 0, got };
     }
 
     // ---------------------------------------------------------- Аналитика
@@ -362,7 +454,7 @@
 
     async loadDemo(now) {
       await this.db.reset();
-      this.db.write(() => I.seedDemo({ settings: this.settingsRepo, categories: this.categories, budgets: this.budgets, expenses: this.expenses }, now));
+      this.db.write(() => I.seedDemo({ settings: this.settingsRepo, categories: this.categories, budgets: this.budgets, expenses: this.expenses, incomes: this.incomes }, now));
       await this.db.flush();
     }
     async wipe() { await this.db.reset(); }
