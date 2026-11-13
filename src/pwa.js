@@ -79,6 +79,17 @@
     window.BudgetUI.boot();
   }
 
+  // Safari на iOS игнорирует user-scalable=no, поэтому щипок гасим сами;
+  // двойной тап отключён через touch-action в CSS. Прокрутка одним пальцем и свайпы листов не затрагиваются.
+  function lockZoom() {
+    const stop = (e) => e.preventDefault();
+    ['gesturestart', 'gesturechange', 'gestureend'].forEach((t) => document.addEventListener(t, stop, { passive: false }));
+    document.addEventListener('touchmove', (e) => {
+      if (e.touches.length > 1 || (typeof e.scale === 'number' && e.scale !== 1)) e.preventDefault();
+    }, { passive: false });
+  }
+
+  lockZoom();
   let allowBrowser = false;
   try { allowBrowser = sessionStorage.getItem('budget.browser') === '1'; } catch (_) { /* ignore */ }
   registerSW();
